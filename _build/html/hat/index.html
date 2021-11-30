@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+
+<html lang="hr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Hat &#8212; RPPIOT prakticni materijali  dokumentacija</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/translations.js"></script>
+    <link rel="index" title="Abecedni popis" href="../genindex.html" />
+    <link rel="search" title="Traži" href="../search.html" />
+    <link rel="next" title="hat-event (event bus)" href="event_bus.html" />
+    <link rel="prev" title="Modbus konzolna aplikacija" href="../02-modbus-console/index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="hat">
+<h1>Hat<a class="headerlink" href="#hat" title="Link na taj naslov">¶</a></h1>
+<p>Prije nastavka rjesavanja problema s termometrom, dati cemo uvod u glavne
+aspekte komponenti Hat projekta, jer cemo se oslanjati na njih za rjesenje. Ovo
+poglavlje je zamisljeno kao prirucnik tim komponentama, i mozete mu se vratiti
+kad god zapnete.</p>
+<p>U drugom predavanju upoznali smo se s glavnim industrijskim praksama vezanim uz
+organizaciju koda, i ovdje cemo ih dosta referencirati. Vidjeli smo kako
+industrijski IoT sustavi obicno imaju ovakvu generalnu arhitekturu:</p>
+<p>Takoder smo spominjali koristi izvodenja takve arhitekture pomocu event-driven
+sustavi. Implementacija takvih sustava moze se vizualizirati sljedecim
+dijagramom:</p>
+<p>Vidimo kako postoje razliciti aktori u sustavu izmedu kojih se nalazi <cite>Event
+bus</cite>, sabirnica dogadaja. Ideja je da kreatori notificiraju sabirnicu dogadaja
+o novonastalim promjenama, a onda sabirnica proslijedi te informacije svim
+zainteresiranim konzumentima. Dogadaj se obicno modelira kao neka struktura
+koja sadrzi informaciju o semantickom znacenju dogadaja (npr. detektirana je
+promjena temperature) i konkretne podatke specificne za promjenu (npr. iznos
+temperature), a mogu biti i popraceni razlicitim vremenskim oznakama (kad je
+napravljeno ocitanje), dodatnim zastavicama itd.</p>
+<p>U kontekstu industrijskih IoT sustava, generalna arhitektura predstavljena
+ranije, moze se izvesti kroz event-driven sustav. Jedan nacin kako bi ona mogla
+biti izvedena je sljedeci:</p>
+<p>Vidimo da su glavne komponente u principu ostale iste, glavna razlika je da su
+one sad povezane preko sabirnice dogadaja, dok prije nije bilo egzaktno
+specificirano kako komuniciraju. Komponente iz hat-open projekta imaju ovakvu
+arhitekturu. Glavne komponente kojima cemo se baviti u nasim zadatcima su event
+server (event bus + business logic), gateway (communication) i GUI server
+(human-machine interface). Uz njih, projekt iz kojeg cemo razvijati nase
+rjesenje konfigurira i druge komponente, ali njima cemo pristupati samo iz
+prespektive korisnika, a manje raditi neki konkretan razvoj vezan uz njih.</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="event_bus.html">hat-event (event bus)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="components.html">Komponente</a></li>
+</ul>
+</div>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">RPPIOT prakticni materijali</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigacija</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../01-architecture/index.html">Arhitektura</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../02-modbus-console/index.html">Modbus konzolna aplikacija</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Hat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../03-hat-modbus-workshop/index.html">Modbus hat aplikacija</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="../02-modbus-console/index.html" title="Prijašnje poglavlje">Modbus konzolna aplikacija</a></li>
+      <li>Next: <a href="event_bus.html" title="sljedeće poglavlje">hat-event (event bus)</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Brzo pretraživanje</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Traži" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Koncar Digital, Fakultet Elektrotehnike i Racunarstva.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/hat/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

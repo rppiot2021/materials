@@ -1,0 +1,234 @@
+
+<!DOCTYPE html>
+
+<html lang="hr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Modbus konzolna aplikacija &#8212; RPPIOT prakticni materijali  dokumentacija</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/translations.js"></script>
+    <link rel="index" title="Abecedni popis" href="../genindex.html" />
+    <link rel="search" title="Traži" href="../search.html" />
+    <link rel="next" title="Hat" href="../hat/index.html" />
+    <link rel="prev" title="Arhitektura" href="../01-architecture/index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="modbus-konzolna-aplikacija">
+<h1>Modbus konzolna aplikacija<a class="headerlink" href="#modbus-konzolna-aplikacija" title="Link na taj naslov">¶</a></h1>
+<p>Ovo poglavlje pokriva prvi dio radionice s 4. predavanja, spajanje na Modbus
+uredaj preko konzolne aplikacije i ispis ocitane vrijednosti na izlaz. Rjesenje
+je objavljeno na <a class="reference external" href="https://github.com/rppiot2021/02-modbus-console">repozitoriju s predavanja</a>, a ovaj dio opisuje korake
+potrebne za dolazak do njega.</p>
+<section id="zadatak">
+<h2>Zadatak<a class="headerlink" href="#zadatak" title="Link na taj naslov">¶</a></h2>
+<p>Na adresi 161.53.17.239:8502 preko Modbus TCP protokola posluzuju se podatci o
+temperaturi s termometra. Specifikacija uredaja je dostupna na <a class="reference external" href="https://download.inveo.com.pl/manual/nano_t_poe/user_manual_en.pdf">ovoj adresi</a>.
+Potrebno je napraviti konzolnu aplikaciju koja ce se spojiti na ovaj uredaj i
+ispisivati ocitanja temperature. Nije potrebno pretjerano se zamarati s
+trazenjem optimalne arhitekture, jer ce se kasnije razvijati rjesenje bazirano
+na tehnologijama iz <code class="docutils literal notranslate"><span class="pre">hat-open</span></code> projekta, koje pokrivaju te probleme.</p>
+</section>
+<section id="rjesenje">
+<h2>Rjesenje<a class="headerlink" href="#rjesenje" title="Link na taj naslov">¶</a></h2>
+<p>Kao i prosli put, prvi korak je proucavanje komunikacijskog sucelja uredaja s
+kojim radimo. Gledanjem <cite>specifikacije
+&lt;https://download.inveo.com.pl/manual/nano_t_poe/user_manual_en.pdf&gt;</cite>, vidimo
+da podatcima o temperaturi mozemo pristupiti na vise nacina, no mi se u sklopu
+zadatka fokusiramo na Modbus, cije sucelje je opisano u poglavlju 7.7. U njemu
+se nalazi nekoliko tablica na temelju kojih mozemo pristupati podatcima,
+konfigurirati uredaj i sl. Tablice imaju stupce <cite>Address</cite>, <cite>Name</cite>, <cite>R/W</cite> i
+<cite>Description</cite>. <cite>Address</cite> nam je najzanimljiviji podatak, njega mozemo
+intepretirati kao identifikator ocitanja. Po Modbus protokolu, ocitanja se
+modeliraju kao sekvencijalna memorija i klijenti koji se spajaju na Modbus
+uredaje, pristupaju podatcima tako da salju zahtjeve za citanje odredene
+adrese. Sto se tice ostalih stupaca, po <cite>Description</cite> mozemo vidjeti semantiku
+svake adrese. Vidimo da adresa 4004 ima informaciju o temperaturi pomnozenu s
+10. To je adresa kojoj cemo pristupati preko nase konzolne aplikacije.</p>
+<p>Drugi korak je nabavljanje komunikacijskog drivera za Modbus. To opet mozemo
+koristiti <a class="reference external" href="https://hat-drivers.hat-open.com">hat-drivers</a> paket, ovaj put
+<a class="reference external" href="https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/index.html">Modbus implementaciju</a>.
+Vidimo kako ona ima razne funkcije za kreiranje konekcije, na temelju tipa
+konekcije koju zelimo otvoriti cemo odabrati jednu od <code class="docutils literal notranslate"><span class="pre">create_...</span></code> funkcija.
+S obzirom da se uredaj ponasa kao slave, to znaci da ce se nasa konzolna
+aplikacija ponasati kao master. Dodatno, komuniciramo preko TCP-a, ne preko
+serial porta, tako da cemo koristiti funkciju
+<a class="reference external" href="https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/index.html#hat.drivers.modbus.create_tcp_master">hat.drivers.modbus.create_tcp_master</a>.
+Ova funkcija prima dva obvezna argumenta, <code class="docutils literal notranslate"><span class="pre">modbus_type</span></code> i <code class="docutils literal notranslate"><span class="pre">address</span></code>.
+<code class="docutils literal notranslate"><span class="pre">modbus_type</span></code> je tip Modbus uredaja s kojim se radi, to je enumeracija
+definirana od strane biblioteke <cite>hat.drivers.modbus.ModbusType
+&lt;https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/common.html#hat.drivers.modbus.common.ModbusType&gt;</cite>.
+Radimo s TCP-om, tako da je <code class="docutils literal notranslate"><span class="pre">ModbusType.TCP</span></code> ispravan tip. <code class="docutils literal notranslate"><span class="pre">address</span></code> je
+struktura podataka koja predstavlja TCP adresu, definirana na
+<a class="reference external" href="https://hat-drivers.hat-open.com/py_api/hat/drivers/tcp.html#hat.drivers.tcp.Address">hat.drivers.tcp.Address</a>.
+Tu unosimo IP adresu i port na kojoj termometar posluzuje podatke. Uz sve ovo,
+vidimo da je <code class="docutils literal notranslate"><span class="pre">create_tcp_master</span></code> funkcija <code class="docutils literal notranslate"><span class="pre">async</span></code> te da ju je potrebno
+pokretati kroz asyncio infrastrukturu.</p>
+<p>Temeljem svega spomenutog, dolazimo do prve verzije rjesenja, gdje se samo
+spajamo na termometar:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">hat.drivers</span> <span class="kn">import</span> <span class="n">modbus</span><span class="p">,</span> <span class="n">tcp</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">():</span>
+    <span class="n">master</span> <span class="o">=</span> <span class="k">await</span> <span class="n">modbus</span><span class="o">.</span><span class="n">create_tcp_master</span><span class="p">(</span>
+        <span class="n">modbus</span><span class="o">.</span><span class="n">ModbusType</span><span class="o">.</span><span class="n">TCP</span><span class="p">,</span>
+        <span class="n">tcp</span><span class="o">.</span><span class="n">Address</span><span class="p">(</span><span class="s1">&#39;127.0.0.1&#39;</span><span class="p">,</span> <span class="mi">9999</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">create_tcp_master</span></code> vraca objekt tipa <a class="reference external" href="https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/master.html#hat.drivers.modbus.master.Master">hat.drivers.modbus.Master</a>.
+Gledanjem njegove konfiguracije, vidimo da on ima funkciju <a class="reference external" href="https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/master.html#hat.drivers.modbus.master.Master">read</a>.
+Ona ima obvezne argumente <code class="docutils literal notranslate"><span class="pre">device_id</span></code>, <code class="docutils literal notranslate"><span class="pre">data_type</span></code> i <code class="docutils literal notranslate"><span class="pre">start_address</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">device_id</span></code> oslanja se na cinjenicu da Modbus protokol moze biti realiziran
+kao <a class="reference external" href="https://en.wikipedia.org/wiki/Multidrop_bus">multidrop</a>. To znaci da na
+jednu konekciju moze biti spojeno vise stvarnih uredaja i argumentima poput
+<code class="docutils literal notranslate"><span class="pre">device_id</span></code>-a se specificira kojem uredaju se treba proslijediti taj zahtjev.
+U nasem konkretnom slucaju, nemamo vise uredaja u multidropu, pa je
+prihvatljiva vrijednost za identifikator 1.</p>
+<p><code class="docutils literal notranslate"><span class="pre">data_type</span></code> referencira tip podatka koje Modbus moze posluzivati. Protokol
+podrzava tipove poput coil i holding register (nazivi iz povjesnih razloga kad
+se radilo s fizickim registrima i zavojnicama). Po tablici iz specifikacije
+uredaja, vidimo da je temperatura zapisana u holidng register-u, tako da
+koristimo enumeraciju <code class="docutils literal notranslate"><span class="pre">hat.drivers.modbus.DataType.HOLDING_REGISTER</span></code> kao
+<code class="docutils literal notranslate"><span class="pre">data_type</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">start_address</span></code> je adresa na kojoj je podatak posluzen. Po tablici u
+dokumentaciji to se posluzuje na adresi 4004, tako da je to vrijednost.
+Isprobavanjem rjesenja, videno je da je ova informacija zapravo zapisana na
+adresi 4003, sto je vjerojatno zbog pocetnog indeksa, dokumentacija krece od 1,
+dok Modbus driver pretpostavlja start od 0. Dakle, <code class="docutils literal notranslate"><span class="pre">start_address</span></code> je 4003.</p>
+<p>Recimo da zelimo kontinuirano slati upite za ocitanjem na uredaj svakih 5
+sekundi. Onda bi nam rjesenje izgledalo ovako:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">hat.drivers</span> <span class="kn">import</span> <span class="n">modbus</span><span class="p">,</span> <span class="n">tcp</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">():</span>
+    <span class="n">master</span> <span class="o">=</span> <span class="k">await</span> <span class="n">modbus</span><span class="o">.</span><span class="n">create_tcp_master</span><span class="p">(</span>
+        <span class="n">modbus</span><span class="o">.</span><span class="n">ModbusType</span><span class="o">.</span><span class="n">TCP</span><span class="p">,</span>
+        <span class="n">tcp</span><span class="o">.</span><span class="n">Address</span><span class="p">(</span><span class="s1">&#39;161.53.17.239&#39;</span><span class="p">,</span> <span class="mi">8502</span><span class="p">))</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">master</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+            <span class="n">device_id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">data_type</span><span class="o">=</span><span class="n">modbus</span><span class="o">.</span><span class="n">DataType</span><span class="o">.</span><span class="n">HOLDING_REGISTER</span><span class="p">,</span>
+            <span class="n">start_address</span><span class="o">=</span><span class="mi">4003</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Ovime na konzolni ispis dobivamo temperaturu pomnozenu s 10. Rjesenje bi se
+dalo raspisivati detaljnije, kao u prvom zadatku, uvoditi konkretnu arhitekturu
+i sl., no ovdje je ideja nastaviti s Hat tehnologijama. Iduci zadatak opisuje
+kako izvesti istu stvar, koristenjem Hatove infrastrukture.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">RPPIOT prakticni materijali</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigacija</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../01-architecture/index.html">Arhitektura</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Modbus konzolna aplikacija</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hat/index.html">Hat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../03-hat-modbus-workshop/index.html">Modbus hat aplikacija</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="../01-architecture/index.html" title="Prijašnje poglavlje">Arhitektura</a></li>
+      <li>Next: <a href="../hat/index.html" title="sljedeće poglavlje">Hat</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Brzo pretraživanje</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Traži" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Koncar Digital, Fakultet Elektrotehnike i Racunarstva.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/02-modbus-console/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

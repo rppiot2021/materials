@@ -1,0 +1,13 @@
+---
+backend_engine:
+    backend:
+        module: hat.event.server.backends.dummy
+    server_id: 1
+communication:
+    address: tcp+sbs://127.0.0.1:23012
+log:
+    version: 1
+module_engine:
+    modules: []
+type: event
+...

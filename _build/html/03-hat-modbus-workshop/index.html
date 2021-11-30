@@ -1,0 +1,453 @@
+
+<!DOCTYPE html>
+
+<html lang="hr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Modbus hat aplikacija &#8212; RPPIOT prakticni materijali  dokumentacija</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/translations.js"></script>
+    <link rel="index" title="Abecedni popis" href="../genindex.html" />
+    <link rel="search" title="Traži" href="../search.html" />
+    <link rel="prev" title="Komponente" href="../hat/components.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="modbus-hat-aplikacija">
+<h1>Modbus hat aplikacija<a class="headerlink" href="#modbus-hat-aplikacija" title="Link na taj naslov">¶</a></h1>
+<p>U proslom zadatku vidjeli smo kako se spojiti Modbus protokolom na termometar
+kroz jednostavnu Pyhton skriptu. U ovom dijelu implementiramo slicnu stvar,
+koristenjem komponenti iz hat-open projekta. Poglavlje o Hatu temeljito opisuje
+pojedine komponente a ovdje cemo ih primjeniti za rjesavanje problema s
+termometrom.</p>
+<section id="repozitorij">
+<h2>Repozitorij<a class="headerlink" href="#repozitorij" title="Link na taj naslov">¶</a></h2>
+<p>Krecemo s repozitorijem <a class="reference external" href="https://github.com/rppiot2021/hat-quickstart">hat-quickstart</a>. Ovo je template repozitorij
+na temelju kojeg se mogu kreirati novi repozitoriji (<cite>Use this template</cite> gumb).
+U repozitoriju su napisane upute kako postaviti razvojno okruzenje. Ono bi
+trebalo raditi na Linuxu, kod ostalih operacijskih sustava mozda naidete na
+probleme i u tom slucaju preporucujemo rad ili kroz virtualnu masinu ili kroz
+docker.</p>
+<p>Repozitorij ima par bitnih direktorija. Prvi su <code class="docutils literal notranslate"><span class="pre">src_py</span></code> i <code class="docutils literal notranslate"><span class="pre">src_js</span></code>, u
+kojima ce se nalaziti implementacija nase aplikacije. Python dio implementacije
+fokusirat ce se na ocitanje i obradu podataka, a JavaScript na vizualizaciju
+kroz web sucelje. U <code class="docutils literal notranslate"><span class="pre">playground</span></code> direktoriju imamo razlicite pomocne skripte
+i konfiguracije pomocu kojih se sustav moze pokretati. Ostale datateke i
+direktoriji se takoder koriste, ali na ove cemo se uglavnom fokusirati tijekom
+rada na ovom zadatku. Pozicioniranjem u direktorij <code class="docutils literal notranslate"><span class="pre">playground/run</span></code> mozemo
+pokrenti skriptu <code class="docutils literal notranslate"><span class="pre">system.sh</span></code> (ili <code class="docutils literal notranslate"><span class="pre">.bat</span></code> za Windowse), otvoriti
+<code class="docutils literal notranslate"><span class="pre">localhost:23023</span></code> i vidjeti minimalno graficko sucelje s jednim brojacem.</p>
+<p>Bacimo li dublji pogled na to sto se tocno dogada pozivom <code class="docutils literal notranslate"><span class="pre">system</span></code> skripte,
+vidimo da ona pokrece <code class="docutils literal notranslate"><span class="pre">hat-orchestrator</span></code> komponentu. Ova komponenta sluzi
+tome da paralelno starta proizvoljni broj drugih procesa. Pogledamo li njenu
+konfiguraciju, u <code class="docutils literal notranslate"><span class="pre">playground/run/data/orchestrator.yaml</span></code>, vidimo u
+<code class="docutils literal notranslate"><span class="pre">components</span></code> polju koji procesi se sve pokrecu. Vidimo da su to druge
+komponente iz hat-open projekta (pogledajte predavanje 3.1. za kratki pregled
+komponenti koje postoje i neke njihove generalne svrhe). Za rjesenje problema,
+implementirati cemo jedan device, event server modul i adapter. Takoder cemo
+prilagoditi view da ima tocniji ispis, tj. da ne pise <cite>counter</cite> vec
+temperature.</p>
+</section>
+<section id="rjesenje">
+<h2>Rjesenje<a class="headerlink" href="#rjesenje" title="Link na taj naslov">¶</a></h2>
+<p>Ovdje opisujemo pristup koji uzimamo kad rjesavamo problem, komponentu po
+komponentu. Krecemo od devicea koji ce nam komunicirati s modbus uredajem,
+nakon toga implementiramo event server modul, koji ce obavljati izracun
+temperature (djeljenje s 10 jer protokol salje vrijednost pomnozenu s 10), iza
+toga adapter koji ce pripremati te podatke za vizualizaciju, i konacno view
+kojeg cemo prilagoditi da prikazuje podatke. U quickstart repozitoriju vec
+postoje primjeri za svaki od ovih tipova specijaliziranih modula, tako da cemo
+se donekle oslanjati samo na njihovu modifikaciju.</p>
+<section id="device">
+<h3>Device<a class="headerlink" href="#device" title="Link na taj naslov">¶</a></h3>
+<img alt="../_images/hat-arch-gateway1.png" src="../_images/hat-arch-gateway1.png" />
+<p>Zelimo implementirati device koji ce svakih nekoliko sekundi slati Modbus
+zahtjev za citanje na termometar i registrirati dogadaj s informacijom koja je
+primljena preko protokola. Slicnu funkcionalnost smo vec implementirali u
+drugom zadatku, samo sad ju trebamo upakirati u implementaciju devicea i
+umjesto ispisa na konzolu, registrirati dogadaj. Implementacija uredaja u
+<code class="docutils literal notranslate"><span class="pre">src_py/project/devices/example.py</span></code> je u principu dovoljno dobra, glavna
+modifikacija koju trebamo napraviti je prilagodba countera. <cite>Example</cite> verzija
+uredaja se ne spaja na nista nego samo ima jedan interni brojac kojeg
+inkrementira svakih nekoliko sekundi. Umjesto toga, mi se zelimo spojiti na
+termometar i svakih nekoliko sekundi registrirati ocitanje s njega. Takoder,
+putanja <code class="docutils literal notranslate"><span class="pre">project/devices/example</span></code> je malo nejasna, tako da cemo ju
+preimenovati u nesto sto ima smisla za nas projekt:
+<code class="docutils literal notranslate"><span class="pre">workshop/devices/modbus</span></code>.</p>
+<p>Primjetimo da sad vise ne mozemo pozvati sustav kroz <code class="docutils literal notranslate"><span class="pre">system.sh/bat</span></code>. Razlog
+tome je upravo ova promjena putanje, device koji konfiguriramo u gatewayu ima
+staro Python ime, pa cemo ga prilagoditi u <code class="docutils literal notranslate"><span class="pre">module:</span> <span class="pre">workshop.devices.modbus</span></code>
+(u <code class="docutils literal notranslate"><span class="pre">playground/run/data/gateway.yaml</span></code>). Uz to, dodatno cemo prilagoditi
+konfiguraciju tako da damo konkretnija imena deviceu i gatewayu: <code class="docutils literal notranslate"><span class="pre">modbus1</span></code> i
+<code class="docutils literal notranslate"><span class="pre">gateway1</span></code>.</p>
+<p>Device sad izgleda ovako:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">hat.aio</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">hat.gateway.common</span>
+<span class="kn">from</span> <span class="nn">hat.drivers</span> <span class="kn">import</span> <span class="n">modbus</span><span class="p">,</span> <span class="n">tcp</span>
+
+
+<span class="n">json_schema_id</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">json_schema_repo</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">device_type</span> <span class="o">=</span> <span class="s1">&#39;modbus&#39;</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span> <span class="n">event_client</span><span class="p">,</span> <span class="n">event_type_prefix</span><span class="p">):</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">Device</span><span class="p">()</span>
+
+    <span class="n">device</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">Group</span><span class="p">()</span>
+    <span class="n">device</span><span class="o">.</span><span class="n">_event_client</span> <span class="o">=</span> <span class="n">event_client</span>
+    <span class="n">device</span><span class="o">.</span><span class="n">_event_type_prefix</span> <span class="o">=</span> <span class="n">event_type_prefix</span>
+    <span class="n">device</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">device</span><span class="o">.</span><span class="n">_main_loop</span><span class="p">())</span>
+
+    <span class="k">return</span> <span class="n">device</span>
+
+
+<span class="k">class</span> <span class="nc">Device</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">gateway</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Device</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">modbus_type</span> <span class="o">=</span> <span class="n">modbus</span><span class="o">.</span><span class="n">ModbusType</span><span class="o">.</span><span class="n">TCP</span>
+        <span class="n">address</span> <span class="o">=</span> <span class="n">tcp</span><span class="o">.</span><span class="n">Address</span><span class="p">(</span><span class="s1">&#39;161.53.17.239&#39;</span><span class="p">,</span> <span class="mi">8502</span><span class="p">)</span>
+        <span class="n">master</span> <span class="o">=</span> <span class="k">await</span> <span class="n">modbus</span><span class="o">.</span><span class="n">create_tcp_master</span><span class="p">(</span><span class="n">modbus_type</span><span class="p">,</span> <span class="n">address</span><span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">master</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+                <span class="n">device_id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">data_type</span><span class="o">=</span><span class="n">modbus</span><span class="o">.</span><span class="n">DataType</span><span class="o">.</span><span class="n">HOLDING_REGISTER</span><span class="p">,</span>
+                <span class="n">start_address</span><span class="o">=</span><span class="mi">4003</span><span class="p">,</span> <span class="n">quantity</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_event_client</span><span class="o">.</span><span class="n">register</span><span class="p">([</span>
+                <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">RegisterEvent</span><span class="p">(</span>
+                    <span class="n">event_type</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_event_type_prefix</span><span class="p">,</span>
+                                <span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="s1">&#39;4003&#39;</span><span class="p">),</span>
+                    <span class="n">source_timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">payload</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayload</span><span class="p">(</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayloadType</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+                        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]))])</span>
+</pre></div>
+</div>
+<p>Trebalo bi se moci pokrenuti, no sad smo uveli promjene zbog kojih osnovni
+quickstart primjer nece moci samostalno raditi. Ali, to ce se promijeniti kad
+prilagodimo ostale komponente.</p>
+</section>
+<section id="modul">
+<h3>Modul<a class="headerlink" href="#modul" title="Link na taj naslov">¶</a></h3>
+<img alt="../_images/hat-arch-event1.png" src="../_images/hat-arch-event1.png" />
+<p>Sad se prebacujemo na event server module. Ako pogledamo koji moduli postoje,
+vidjet cemo direktorij <code class="docutils literal notranslate"><span class="pre">src_py/project/modules</span></code> s modulima <code class="docutils literal notranslate"><span class="pre">example.py</span></code> i
+<code class="docutils literal notranslate"><span class="pre">enable_all.py</span></code>. <code class="docutils literal notranslate"><span class="pre">enable_all</span></code> mozemo ignorirati, njegova svrha je da
+registrira dogadaje za paljenje deviceova (vise info u poglavlju o Hatu).</p>
+<p>Odmah cemo oba modula prebaciti u <code class="docutils literal notranslate"><span class="pre">workshop/modules</span></code>, a <code class="docutils literal notranslate"><span class="pre">example</span></code> cemo
+preimenovati u <code class="docutils literal notranslate"><span class="pre">temperature</span></code> jer cemo ga preinaciti u to da racuna
+temperaturu na temelju dogadaja koje registrira device.</p>
+<p>Znamo da device registrira ocitanja temperatura u dogadajima s tipom
+<code class="docutils literal notranslate"><span class="pre">('gateway',</span> <span class="pre">'gateway1',</span> <span class="pre">'modbus',</span> <span class="pre">'modbus1',</span> <span class="pre">'gateway',</span> <span class="pre">'4003')</span></code>, tako da
+cemo pretplatiti modul na taj tip. Nakon toga, nema neke potrebe za vecim
+preinakama, osim prilagodbe <code class="docutils literal notranslate"><span class="pre">process</span></code> metode u sesiji od modula. Ona ce sad
+registrirati dogadaj s tipom <code class="docutils literal notranslate"><span class="pre">('temperature')</span></code> a payload ce joj biti tocna
+temperatura, iznos koji primi preko Modbusa podijeljen s 10.</p>
+<p>Implementacija modula izgleda ovako:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.aio</span>
+<span class="kn">import</span> <span class="nn">hat.event.server.common</span>
+
+
+<span class="n">json_schema_id</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">json_schema_repo</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="n">_source_id</span> <span class="o">=</span> <span class="mi">0</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span> <span class="n">engine</span><span class="p">):</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">Module</span><span class="p">()</span>
+
+    <span class="k">global</span> <span class="n">_source_id</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Source</span><span class="p">(</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">SourceType</span><span class="o">.</span><span class="n">MODULE</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="vm">__name__</span><span class="p">,</span>
+        <span class="nb">id</span><span class="o">=</span><span class="n">_source_id</span><span class="p">)</span>
+    <span class="n">_source_id</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="n">module</span><span class="o">.</span><span class="n">_subscription</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Subscription</span><span class="p">([</span>
+        <span class="p">(</span><span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="s1">&#39;?&#39;</span><span class="p">,</span> <span class="s1">&#39;modbus&#39;</span><span class="p">,</span> <span class="s1">&#39;?&#39;</span><span class="p">,</span> <span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="s1">&#39;4003&#39;</span><span class="p">)])</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">Group</span><span class="p">()</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_engine</span> <span class="o">=</span> <span class="n">engine</span>
+
+    <span class="k">return</span> <span class="n">module</span>
+
+
+<span class="k">class</span> <span class="nc">Module</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">subscription</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subscription</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">create_session</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Session</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_engine</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">,</span>
+                       <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">create_subgroup</span><span class="p">())</span>
+
+
+<span class="k">class</span> <span class="nc">Session</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ModuleSession</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">group</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_engine</span> <span class="o">=</span> <span class="n">engine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">changes</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_engine</span><span class="o">.</span><span class="n">create_process_event</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">,</span>
+                <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">RegisterEvent</span><span class="p">(</span>
+                    <span class="n">event_type</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="p">),</span>
+                    <span class="n">source_timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">payload</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayload</span><span class="p">(</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayloadType</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+                        <span class="n">data</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">payload</span><span class="o">.</span><span class="n">data</span> <span class="o">/</span> <span class="mi">10</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)))</span>
+            <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">changes</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Ne zaboravimo da je i dalje potrebno uvesti promjene u konfiguraciju, analogne
+promjenama u gatewayu, dakle imena modula.</p>
+</section>
+<section id="adapter">
+<h3>Adapter<a class="headerlink" href="#adapter" title="Link na taj naslov">¶</a></h3>
+<img alt="../_images/hat-arch-gui1.png" src="../_images/hat-arch-gui1.png" />
+<p>Konacno se fokusiramo na vizualizaciju. Prvi korak je implementacija adaptera
+koji bi preko svog sucelja za komunikaciju s web klijentima posluzivao stanje
+u kojem je ocitanje temperature. On bi se pretplacivao na <code class="docutils literal notranslate"><span class="pre">('temperature')</span></code>
+dogadaj koji registriramo u event serverovom modulu.</p>
+<p>Ako pogledamo adaptere iz quickstarta, vidimo da postoji
+<code class="docutils literal notranslate"><span class="pre">src_py/project/adapters/example.py</span></code>. Njega cemo prilagoditi da ne radi vise
+s brojacem, vec da se pretplacuje na promjene temperature i prosljeduje ih
+svojim sesijama. To postizemo implementacijom <code class="docutils literal notranslate"><span class="pre">create_subscription</span></code> funkcije.
+Drugi korak je proslijedivanje temperature sesijama, sto se dogadalo u
+<code class="docutils literal notranslate"><span class="pre">_main_loop</span></code> metodi. Ona zapravo moze biti ista, ali malo cemo prilagoditi
+imena varijabli, nema potrebe da se temperatura pohranjuje u privatnim
+varijablama adapterove klase itd. Tako dolazimo do sljedece implementacije:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.aio</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">hat.gui.common</span>
+<span class="kn">import</span> <span class="nn">hat.util</span>
+
+
+<span class="n">json_schema_id</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">json_schema_repo</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_subscription</span><span class="p">(</span><span class="n">conf</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Subscription</span><span class="p">([(</span><span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="p">)])</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_adapter</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span> <span class="n">event_client</span><span class="p">):</span>
+    <span class="n">adapter</span> <span class="o">=</span> <span class="n">Adapter</span><span class="p">()</span>
+
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">Group</span><span class="p">()</span>
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_event_client</span> <span class="o">=</span> <span class="n">event_client</span>
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_state_change_cb_registry</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">CallbackRegistry</span><span class="p">()</span>
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_sessions</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">adapter</span><span class="o">.</span><span class="n">_main_loop</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">adapter</span>
+
+
+<span class="k">class</span> <span class="nc">Adapter</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">gui</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Adapter</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">create_session</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">juggler_client</span><span class="p">):</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">Session</span><span class="p">(</span>
+            <span class="n">juggler_client</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">create_subgroup</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sessions</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">session</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">events</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_event_client</span><span class="o">.</span><span class="n">receive</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+                <span class="n">temperature</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">payload</span><span class="o">.</span><span class="n">data</span>
+            <span class="k">for</span> <span class="n">session</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sessions</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">is_open</span><span class="p">:</span>
+                    <span class="n">session</span><span class="o">.</span><span class="n">notify_state_change</span><span class="p">(</span><span class="n">temperature</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">Session</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">gui</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">AdapterSession</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">juggler_client</span><span class="p">,</span> <span class="n">group</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_juggler_client</span> <span class="o">=</span> <span class="n">juggler_client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">def</span> <span class="nf">notify_state_change</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_juggler_client</span><span class="o">.</span><span class="n">set_local_data</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Opet cemo promijeniti putanju adapteru tako da ga prebacimo u
+<code class="docutils literal notranslate"><span class="pre">workshop/adapter</span></code> i preimenujemo u <code class="docutils literal notranslate"><span class="pre">temperature.py</span></code> (nema veze sto je isto
+kao i modul, sama cinjenica da su u drugim direktorijima je dovoljna
+distinkcija), pa je potrebno prilagoditi i konfiguraciju. Osim promjene
+putanje, prilagoditi cemo i ime adaptera iz <code class="docutils literal notranslate"><span class="pre">adapter</span></code> u <code class="docutils literal notranslate"><span class="pre">temperature</span></code>.</p>
+</section>
+<section id="view">
+<h3>View<a class="headerlink" href="#view" title="Link na taj naslov">¶</a></h3>
+<p>Da bi prilagodba bila kompletna, potrebno je prilagoditi i view. Dosad nismo
+toliko zalazili u detalje kako se view implementira, ali nam za pocetak oni
+nisu ni previse bitni. Implementacija viewa je u
+<code class="docutils literal notranslate"><span class="pre">src_js/views/main/index.js</span></code>. Vidimo da vec postoji neka implementacija koja
+ima funkciju <code class="docutils literal notranslate"><span class="pre">vt</span></code> koja vraca listu. Lista sadrzi ime taga i njegov sadrzaj.
+Za graficke prikaze koristimo bibilioteke koje ovakve strukture podataka
+pretvaraju u DOM (Document Object Model). Tako kad implementiramo view, ono sto
+vrati njegova funkcija proslijeduje se tim bibliotekama i one generiraju DOM s
+elementima:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">span</span><span class="o">&gt;</span><span class="n">counter</span><span class="p">:</span> <span class="mi">10</span><span class="o">&lt;/</span><span class="n">span</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>Ocita je jos jedna promjena - izraz <code class="docutils literal notranslate"><span class="pre">r.get('remote',</span> <span class="pre">'adapter',</span> <span class="pre">'counter')</span></code>
+se pretvoro u broj 10. U viewovima preko varijable <code class="docutils literal notranslate"><span class="pre">r</span></code> pristupamo <a class="reference external" href="https://hat-renderer.hat-open.com/">renderer
+objektu</a> (dokumentacija je nekompletna,
+bolje mozda gledati kod). Cijela ideja iza renderera je da on ima neko svoje
+stanje i na temelju tog stanja generira DOM. Kad se stanje promijeni, ponovno
+se pokrene izracun DOM-a na temelju tog novog stanja. Stanju pristupamo preko
+funkcije <code class="docutils literal notranslate"><span class="pre">r.get</span></code>, a mozemo ga mijenjati preko funkcije <code class="docutils literal notranslate"><span class="pre">r.set</span></code>. Tako kad
+kazemo <code class="docutils literal notranslate"><span class="pre">counter:</span> <span class="pre">r.get('remote',</span> <span class="pre">'adapter',</span> <span class="pre">'counter')</span></code>, zapravo oznacavamo
+da iza dvotocke pise vrijednost procitana iz stanja aplikacije. Argumentima
+poslanim <code class="docutils literal notranslate"><span class="pre">r.get</span></code> funkciji odredujemo putanju do dijela stanja koji nas
+zanima. Konkretno u ovom slucaju, brojacu pristupamo s putanjom
+<code class="docutils literal notranslate"><span class="pre">remote/adapter/counter</span></code> jer je stanje objekt:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span> <span class="n">remote</span><span class="p">:</span> <span class="p">{</span> <span class="n">adapter</span><span class="p">:</span> <span class="p">{</span> <span class="n">counter</span><span class="p">:</span> <span class="mi">10</span> <span class="p">}</span> <span class="p">}</span> <span class="p">,</span> <span class="n">local</span><span class="p">:</span> <span class="p">{},</span> <span class="n">xyz</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span> <span class="o">...</span> <span class="p">}</span>
+</pre></div>
+</div>
+<p>Kod viewova postoji dodatni aspekt rada sa stanjem, a to je cinjenica da je
+nasa aplikacija spojena na GUI server. GUI server notificira promjene stanja
+svojim klijentima. To znaci da se u nekom trenutku implicitno poziva <code class="docutils literal notranslate"><span class="pre">r.set</span></code>
+kad neki adapter prijavi da mu se stanje promijenilo. Konkretno, dio stanja na
+koji utjece adapter nalazi se na putanji <code class="docutils literal notranslate"><span class="pre">remote/&lt;ime_adaptera&gt;</span></code>.</p>
+<p>Vracajuci se na radionicu, dosadasnji view s brojacem nam vise ne odgovara,
+htjeli bismo da umjesto counter pise temperature. Dodatno, mijenjali smo ime i
+strukturu stanja adaptera, pa vise ni <code class="docutils literal notranslate"><span class="pre">r.get</span></code> nije precizan. Ako zelimo
+promijeniti tekst, prevodimo <code class="docutils literal notranslate"><span class="pre">counter:</span></code> u <code class="docutils literal notranslate"><span class="pre">temperature:</span></code>, a nova putanja je
+<code class="docutils literal notranslate"><span class="pre">remote/temperature</span></code> (<code class="docutils literal notranslate"><span class="pre">temperature</span></code> je ime adaptera, a njegovo stanje je
+samo jedan broj).</p>
+<p>Ta implementacija sad bi trebala izgledati ovako:</p>
+<div class="highlight-javascript notranslate"><div class="highlight"><pre><span></span><span class="k">import</span> <span class="s1">&#39;main/index.scss&#39;</span><span class="p">;</span>
+
+
+<span class="k">export</span> <span class="kd">function</span> <span class="nx">vt</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">[</span><span class="s1">&#39;span&#39;</span><span class="p">,</span> <span class="sb">`temperature: </span><span class="si">${</span><span class="nx">r</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">&#39;remote&#39;</span><span class="p">,</span> <span class="s1">&#39;temperature&#39;</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">];</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Nakon buildanja viewa (<code class="docutils literal notranslate"><span class="pre">doit</span> <span class="pre">js_view</span></code>), mozemo otvoriti browser na adresu
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:23023</span></code> i vidjeti nas novi termometar.</p>
+</section>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">RPPIOT prakticni materijali</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigacija</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../01-architecture/index.html">Arhitektura</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../02-modbus-console/index.html">Modbus konzolna aplikacija</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hat/index.html">Hat</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Modbus hat aplikacija</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="../hat/components.html" title="Prijašnje poglavlje">Komponente</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Brzo pretraživanje</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Traži" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Koncar Digital, Fakultet Elektrotehnike i Racunarstva.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/03-hat-modbus-workshop/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

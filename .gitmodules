@@ -1,0 +1,3 @@
+[submodule "03-hat-modbus-workshop/repo"]
+	path = 03-hat-modbus-workshop/repo
+	url = git@github.com:rppiot2021/03-hat-modbus-workshop.git

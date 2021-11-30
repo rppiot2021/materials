@@ -1,0 +1,365 @@
+
+<!DOCTYPE html>
+
+<html lang="hr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>hat-event (event bus) &#8212; RPPIOT prakticni materijali  dokumentacija</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/translations.js"></script>
+    <link rel="index" title="Abecedni popis" href="../genindex.html" />
+    <link rel="search" title="Traži" href="../search.html" />
+    <link rel="next" title="Komponente" href="components.html" />
+    <link rel="prev" title="Hat" href="index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="hat-event-event-bus">
+<h1>hat-event (event bus)<a class="headerlink" href="#hat-event-event-bus" title="Link na taj naslov">¶</a></h1>
+<p>Prva komponenta koju gledamo je event server. Ona zapravo ima dvostranu ulogu,
+prva je da se ponasa kao sabirnica dogadaja, a druga da sadrzi specijalizirane
+module za poslovnu logiku. U ovom dijelu fokusiramo se na prvi aspekt,
+komunikacijsku sabirnicu. Trenutno cemo napraviti malu digresiju od primjera s
+termometrom, da pokazemo neke generalne ideje oko rada s event serverom, koje
+su primjenjive u cijelom sustavu.</p>
+<p>Event server se pokrece pozivom naredbe <code class="docutils literal notranslate"><span class="pre">hat-event</span></code>. Ta naredba prima
+komandnolinijski argument <code class="docutils literal notranslate"><span class="pre">--conf</span></code> kojim joj se predaje putanja do
+konfiguracijske datoteke. Ta datoteka je u JSON ili YAML formatu i ima
+strukturu propisanu <a class="reference external" href="https://github.com/hat-open/hat-event/blob/master/schemas_json/main.yaml">JSON shemom</a>.
+Minimalna konfiguracija mogla bi biti:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">backend_engine</span><span class="p">:</span>
+    <span class="nt">backend</span><span class="p">:</span>
+        <span class="nt">module</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hat.event.server.backends.dummy</span>
+    <span class="nt">server_id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nt">communication</span><span class="p">:</span>
+    <span class="nt">address</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tcp+sbs://127.0.0.1:23012</span>
+<span class="nt">log</span><span class="p">:</span>
+    <span class="nt">version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nt">module_engine</span><span class="p">:</span>
+    <span class="nt">modules</span><span class="p">:</span> <span class="p p-Indicator">[]</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">event</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>Pozivom <code class="docutils literal notranslate"><span class="pre">hat-event</span> <span class="pre">--conf</span> <span class="pre">conf.yaml</span></code> (ako je minimalna konfiguracija zapisana
+u datoteci <code class="docutils literal notranslate"><span class="pre">conf.yaml</span></code>) trebao bi se pokrenuti program bez ikakvog ispisa
+koji ne zavrsava. Ovaj poziv pokrece sabirnicu dogadaja koja ceka da se na nju
+spoje aktori event-driven sustava (proizvodaci i potrosaci dogdaja). Iduci
+korak je implementacija aktora. Spajanje na event server radi se preko
+<a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/client.html">hat.event.client</a> modula. Taj
+modul u sebi sadrzi implementaciju funkcija za spajanje na event server,
+primanje i registraciju dogadaja. Funkcija <code class="docutils literal notranslate"><span class="pre">connect</span></code> obavlja spajanje na
+server i vraca nazad instancu klase <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/client.html#hat.event.client.Client">hat.event.client.Client</a>.
+Pozivanjem metoda <code class="docutils literal notranslate"><span class="pre">receive</span></code> i <code class="docutils literal notranslate"><span class="pre">register</span></code> se primaju ili registriraju
+dogadaji.</p>
+<p>Dogadaji su uredene trojke koje sadrze atribute <code class="docutils literal notranslate"><span class="pre">event_type</span></code>, <code class="docutils literal notranslate"><span class="pre">payload</span></code> i
+<code class="docutils literal notranslate"><span class="pre">source_timestamp</span></code>, a konkretna struktura koja se koristi ovisi o tome koja
+metoda se pokusava zvati (npr. metoda <code class="docutils literal notranslate"><span class="pre">receive</span></code> vraca <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/common/data.html#hat.event.common.data.Event">hat.event.common.Event</a>,
+dok se metodi <code class="docutils literal notranslate"><span class="pre">register</span></code> predaje <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/common/data.html#hat.event.common.data.RegisterEvent">hat.event.common.RegisterEvent</a>,
+ali obje imaju parametre <code class="docutils literal notranslate"><span class="pre">event_type</span></code>, <code class="docutils literal notranslate"><span class="pre">payload</span></code> i <code class="docutils literal notranslate"><span class="pre">source_timestamp</span></code>,
+razlika je u tome da <code class="docutils literal notranslate"><span class="pre">hat.event.common.Event</span></code> ima neke dodatne parametre koje
+mu dodijeli server). <code class="docutils literal notranslate"><span class="pre">event_type</span></code> tuple stringova koja sadrzi semanticko
+znacenje promjene koja se desila. Po ranije primjeru, <code class="docutils literal notranslate"><span class="pre">event_type</span></code> za dogadaj
+koji signalizira promjenu ocitanja mjerenja mogao bi biti <code class="docutils literal notranslate"><span class="pre">['thermometer1',</span>
+<span class="pre">'measurement_change']</span></code>.  <code class="docutils literal notranslate"><span class="pre">payload</span></code> sadrzi podatke specificne za promjenu
+koja se desila, npr. za primjer promjene mjerenja, on bi mogao biti broj koji
+ozacava novoizmjerenu temperaturu. <code class="docutils literal notranslate"><span class="pre">source_timestamp</span></code> je opcionalna vremenska
+oznaka u kojoj kreator dogadaja tom dogadaju moze pridruziti oznaku vremena
+(npr. kad je izmjerena temperatura). Kako je <code class="docutils literal notranslate"><span class="pre">source_timestamp</span></code> opcionalan, u
+svim primjerima cemo ga stavljati u <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<section id="kreator-dogadaja">
+<h2>Kreator dogadaja<a class="headerlink" href="#kreator-dogadaja" title="Link na taj naslov">¶</a></h2>
+<p>S ovime na umu, mozemo implementirati prvu skriptu koja ce se ponasti kao
+kreator dogadaja. Ona se pokrece, spaja na event server i registrira dogadaj
+koji signalizira promjenu nekog arbitrarnog mjerenja. Funkcijom <code class="docutils literal notranslate"><span class="pre">connect</span></code>
+spojiti cemo se na event server. U konfiguraciji servera, pod
+<code class="docutils literal notranslate"><span class="pre">communication/address</span></code> vidimo adresu i port na kojoj server slusa. Tu adresu
+predajemo prvom argumentu <code class="docutils literal notranslate"><span class="pre">connect</span></code> funkcije. Drugi argument,
+<code class="docutils literal notranslate"><span class="pre">subscriptions</span></code> zasad cemo ostaviti kao praznu listu, a objasnit cemo ga kad
+cemo implementirati konzumenta dogadaja za ovaj primjer.</p>
+<p>Nakon toga, u beskonacnoj petlji, svake tri sekunde registriramo event ciji je
+<code class="docutils literal notranslate"><span class="pre">event_type</span></code> <code class="docutils literal notranslate"><span class="pre">('measurement1',</span> <span class="pre">'change',</span> <span class="pre">'abc')</span></code>, <code class="docutils literal notranslate"><span class="pre">source_timestamp</span></code> je
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, a <code class="docutils literal notranslate"><span class="pre">payload</span></code> je JSON-serijalizabilna struktura podataka s jednim
+atributom, <code class="docutils literal notranslate"><span class="pre">value</span></code>, cija vrijednost je nasumicni broj od 0 do 10. To nas
+ostavlja s ovakvom konkretnom implementacijom:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.event.client</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">():</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="k">await</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+        <span class="s1">&#39;tcp+sbs://127.0.0.1:23012&#39;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">([</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">RegisterEvent</span><span class="p">(</span>
+            <span class="n">event_type</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;measurement1&#39;</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="s1">&#39;abc&#39;</span><span class="p">),</span>
+            <span class="n">source_timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">payload</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayload</span><span class="p">(</span>
+                <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayloadType</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+                <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)}))])</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Ovaj program ce se upaliti i raditi dok ga se ne ugasi, bez ispisivanja icega,
+ali mozete dodati ispise nasumicnih brojeva koji se registriraju. Takoder,
+umjesto <code class="docutils literal notranslate"><span class="pre">register</span></code>, postoji metoda <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/client.html#hat.event.client.Client.register_with_response">register_with_response</a>
+koja vrati nazad instance dogadaja koji su se registrirali, zanimljivo bi bilo
+vidjeti njihov ispis.</p>
+</section>
+<section id="konzument-dogadaja">
+<h2>Konzument dogadaja<a class="headerlink" href="#konzument-dogadaja" title="Link na taj naslov">¶</a></h2>
+<p>Mogucnost registracije dogadaja nam nema puno koristi ako se ti dogadaji ne
+propagiraju do nekih drugih klijenata. Zbog toga imamo potrebu razviti novog
+aktora koji bi primao dogadaje koje registrira kreator iz proslog dijela, i
+ispisivao ih na konzolu. U proslom dijelu smo kod <code class="docutils literal notranslate"><span class="pre">connect</span></code> funkcije
+ignorirali argument <code class="docutils literal notranslate"><span class="pre">subscriptions</span></code> jer nam tad nije bio potreban, sad cemo
+ga koristiti da novostvorenog klijenta „pretplatimo” na dogadaje s odredenom
+semantikom. Semantiku dogadaja odreduje njegov <code class="docutils literal notranslate"><span class="pre">event_type</span></code>, koji je izveden
+kao tuple stringova. Ako pogledamo potpis <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/client.html#hat.event.client.connect">connect</a>
+funkcije, vidimo da je pretplata definirana kao lista tuplova stringova,
+odnosno novostvoreni klijent se pretplacuje na n tipova dogadaja.</p>
+<p>Nakon stvaranja konekcije s pretplatom, iduca metoda klijenta koja nas zanima
+je <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/client.html#hat.event.client.Client.receive">receive</a>.
+Kad event server primi dogadaj s tipom koji na koji je klijent pretplacen, on
+mu ga posalje. <code class="docutils literal notranslate"><span class="pre">receive</span></code> metoda ceka da klijent primi dogadaj i vrati ga na
+izlaz.</p>
+<p>Na temelju ovoga, mozemo implementirati naseg konzumenta:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.event.client</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">():</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="k">await</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+        <span class="s1">&#39;tcp+sbs://127.0.0.1:23012&#39;</span><span class="p">,</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s1">&#39;measurement1&#39;</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="s1">&#39;abc&#39;</span><span class="p">)])</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">events</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">receive</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">events</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Pokrenemo li konzumenta i kreatora istovremeno, vidjet cemo da konzument
+ispisuje dogadaje koje kreator registrira. Pokrenemo li vise kreatora i
+konzumenata istovremeno, svaki konzument ce ispisivati dogdaje koje
+registriraju svi kreatori.</p>
+<p>Dodatno, kod implementacije konzumenta, pretplatili smo ga na dogadaje s tipom
+<code class="docutils literal notranslate"><span class="pre">('measurement1',</span> <span class="pre">'change',</span> <span class="pre">'abc')</span></code>, ali implementacija klijenta nam
+omogucuje i koristenje <cite>wildcard</cite> elemenata <code class="docutils literal notranslate"><span class="pre">'*'</span></code> i <code class="docutils literal notranslate"><span class="pre">'?'</span></code>. <code class="docutils literal notranslate"><span class="pre">?</span></code> moze biti
+na bilo kojem mjestu unutar pretplate i daje do znanja event serveru da nam je
+svejedno sto se nalazi u tipu dogadaja na tom mjestu. Tako bi legitimna
+pretplata bila <code class="docutils literal notranslate"><span class="pre">('measurement',</span> <span class="pre">'?',</span> <span class="pre">'abc')</span></code> i konzument bi funkcionirao
+jednako. Razlika je da, ako bismo imali aktora koji registrira dogadaje s tipom
+<code class="docutils literal notranslate"><span class="pre">('measurement',</span> <span class="pre">'xyz',</span> <span class="pre">'abc')</span></code>, i ti dogadaji bi se ispisivali. Wildcard
+<code class="docutils literal notranslate"><span class="pre">'*'</span></code> moze biti samo na kraju pretplate i daje do znanja event serveru da nam
+je svejedno sto se nalazi u tipu dogadaja od mjesta gdje je znak postavljen.
+Tako bi pretplata <code class="docutils literal notranslate"><span class="pre">('measurement',</span> <span class="pre">'*')</span></code> pokrivala <code class="docutils literal notranslate"><span class="pre">('measurement',</span>
+<span class="pre">'change',</span> <span class="pre">'abc')</span></code> dogadaje, ali i <code class="docutils literal notranslate"><span class="pre">('measurement')</span></code>, <code class="docutils literal notranslate"><span class="pre">('measurement',</span>
+<span class="pre">'xyz')</span></code>, <code class="docutils literal notranslate"><span class="pre">('measurement',</span> <span class="pre">'123',</span> <span class="pre">'456')</span></code>…</p>
+</section>
+<section id="upiti-u-stare-dogadaje">
+<h2>Upiti u stare dogadaje<a class="headerlink" href="#upiti-u-stare-dogadaje" title="Link na taj naslov">¶</a></h2>
+<p>Ovaj aspekt event servera nam mozda nece biti potreban u prakticnim zadatcima,
+no svejedno ga navodimo radi kompletnosti. Klijenti event servera imaju jos
+jednu metodu koju nismo pokrili, <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/client.html#hat.event.client.Client.query">query</a>.
+Vidimo po potpisu funkcije da ona predaje argument tipa <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/common/data.html#hat.event.common.data.QueryData">QueryData</a>.
+Gledanjem dokumentacije te strukture, vidimo da ona ima puno opcionalnih
+argumenata koji izgledaju kao filteri. Kad nad klijentom pozovemo <code class="docutils literal notranslate"><span class="pre">query</span></code>,
+event server primi filtere i na temelju njih napravi upit u bazu podataka kojim
+pristupi starim dogadajima koji su se registrirali. Onda vrati te dogadaje i
+klijent ih izbaci kao rezultat poziva metode <code class="docutils literal notranslate"><span class="pre">query</span></code>.</p>
+<p><a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/common/data.html#hat.event.common.data.QueryData">QueryData</a>
+ima razne argumente:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">event_ids</span></code> filtrira samo one dogadaje s identifikatorima koji su zadani</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">event_types</span></code> filtrira dogadaje na temelju njihovog tipa (takoder moze
+imati wildcardove)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">t_from</span></code>, <code class="docutils literal notranslate"><span class="pre">t_to</span></code> odreduju pocetak i kraj vremenskog intervala
+<code class="docutils literal notranslate"><span class="pre">timestamp</span></code> parametra dogadaja (serverova vremenska oznaka)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">source_t_from</span></code>, <code class="docutils literal notranslate"><span class="pre">source_t_to</span></code> odreduju pocetak i kraj vremenskog
+intervala <code class="docutils literal notranslate"><span class="pre">source_timestamp</span></code> parametra dogadaja (klijentova vremenska
+oznaka)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">payload</span></code> filtrira na temelju <code class="docutils literal notranslate"><span class="pre">payload</span></code> parametra dogadaja, gleda se
+jednakost</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">order_by</span></code> odreduje kako ce vraceni dogadaji biti soritrani</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unique_type</span></code> daje do znanja event serveru da u rezultatu upita ne vrati
+vise dogadaja s istim tipom</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max_results</span></code> je cvrsto ogranicenje na maksimalni broj dogdaja koji su
+vraceni</p></li>
+</ul>
+</div></blockquote>
+<p>Mozemo i isprobati ovu funkcionalnost, dosadasnja konfiguracija koristi
+implementaciju baze koja ne radi nista, tako da ju je potrebno malo
+prilagoditi:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">backend_engine</span><span class="p">:</span>
+    <span class="nt">backend</span><span class="p">:</span>
+        <span class="nt">module</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hat.event.server.backends.sqlite</span>
+        <span class="nt">db_path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hat-event.db</span>
+        <span class="nt">query_pool_size</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+    <span class="nt">server_id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nt">communication</span><span class="p">:</span>
+    <span class="nt">address</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tcp+sbs://127.0.0.1:23012</span>
+<span class="nt">log</span><span class="p">:</span>
+    <span class="nt">version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nt">module_engine</span><span class="p">:</span>
+    <span class="nt">modules</span><span class="p">:</span> <span class="p p-Indicator">[]</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">event</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>Nakon toga, mozemo pokrenuti kreatora dogadaja, da nam registrira
+<code class="docutils literal notranslate"><span class="pre">('measurement',</span> <span class="pre">'change',</span> <span class="pre">'abc')</span></code> dogadaje. Paralelno mozemo pokrenuti
+sljedecu skriptu koja radi upit na bazu:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.event.client</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">():</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="k">await</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+        <span class="s1">&#39;tcp+sbs://127.0.0.1:23012&#39;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="n">events</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+        <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">QueryData</span><span class="p">(</span>
+            <span class="n">event_types</span><span class="o">=</span><span class="p">[</span>
+                <span class="p">(</span><span class="s1">&#39;measurement1&#39;</span><span class="p">,</span> <span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="s1">&#39;abc&#39;</span><span class="p">)]))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">events</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Na konzoli bi se trebali ispisati svi dogadaji koje je kreator registrirao u
+proslosti.</p>
+<p>Ovime smo pokrili osnove rada s event serverom koji je zajednicki kod svih
+komponenti, a u nastavku cemo vidjeti kako Hat komponente i njihovi
+specijalizirani moduli koriste tu infrastrukturu da medusobno suraduju i
+implementiraju funkcionalnost industrijskih IoT sustava.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">RPPIOT prakticni materijali</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigacija</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../01-architecture/index.html">Arhitektura</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../02-modbus-console/index.html">Modbus konzolna aplikacija</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Hat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../03-hat-modbus-workshop/index.html">Modbus hat aplikacija</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Hat</a><ul>
+      <li>Previous: <a href="index.html" title="Prijašnje poglavlje">Hat</a></li>
+      <li>Next: <a href="components.html" title="sljedeće poglavlje">Komponente</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Brzo pretraživanje</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Traži" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Koncar Digital, Fakultet Elektrotehnike i Racunarstva.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/hat/event_bus.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

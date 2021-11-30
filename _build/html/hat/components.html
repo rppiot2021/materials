@@ -1,0 +1,706 @@
+
+<!DOCTYPE html>
+
+<html lang="hr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Komponente &#8212; RPPIOT prakticni materijali  dokumentacija</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/translations.js"></script>
+    <link rel="index" title="Abecedni popis" href="../genindex.html" />
+    <link rel="search" title="Traži" href="../search.html" />
+    <link rel="next" title="Modbus hat aplikacija" href="../03-hat-modbus-workshop/index.html" />
+    <link rel="prev" title="hat-event (event bus)" href="event_bus.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="komponente">
+<h1>Komponente<a class="headerlink" href="#komponente" title="Link na taj naslov">¶</a></h1>
+<p>Podsjetimo se jos jednom na event-driven arhitekturu industrijskog IoT sustava:</p>
+<p>Spomenuli smo da komponente Hat projekta preslikavaju ovu arhitekturu, na
+sljedeci nacin:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference external" href="https://hat-gateway.hat-open.com">hat-gateway</a> komponenta je zaduzena za
+komunikaciju s uredajima</p></li>
+<li><p>specijalizirani moduli <a class="reference external" href="https://hat-event.hat-open.com">hat-event</a>
+komponente su zaduzeni za implementaciju procesne logike</p></li>
+<li><p><a class="reference external" href="https://hat-gui.hat-open.com">hat-gui</a> komponenta je zaduzena za
+vizualizaciju</p></li>
+</ul>
+</div></blockquote>
+<p>Sve tri komponente imaju jednu zajednicku crtu, a to je da su same
+implementacije komponenti genericne, ali se konfiguriraju da koriste
+implementacije specijaliziranih modula u kojima je sadrzana konkretna domenska
+logika specificna za aplikaciju koja se razvija. To konkretno znaci da
+komponenta specificira odredeno sucelje koje modul mora zadovoljiti,
+implementator sustava napravi implementaciju tog sucelja i kad pokrece
+komponentu, u konfiguraciji joj zada da koristi tu implementaciju. Ovako se
+onda komponenta vise brine za „infrastrukturne” stvari, poput spajanja na event
+server, suradivanja sa specijaliziranim modulima, itd., a specijalizirani
+moduli implementiraju aplikaciju.</p>
+<p>Prije nego sto se bacimo na konkretne komponente, kratki pregled terminologije
+koju cemo koristiti od sad:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>device - specijalizirani modul gateway komponente</p></li>
+<li><p>modul - specijalizirani modul event servera</p></li>
+<li><p>adapter - specijalizirani modul GUI komponente</p></li>
+</ul>
+</div></blockquote>
+<p>Pogledajmo sad arhitekturu sustava, sad kad znamo za specijalizirane module:</p>
+<img alt="../_images/hat-arch-base.png" src="../_images/hat-arch-base.png" />
+<section id="gateway">
+<h2>Gateway<a class="headerlink" href="#gateway" title="Link na taj naslov">¶</a></h2>
+<img alt="../_images/hat-arch-gateway.png" src="../_images/hat-arch-gateway.png" />
+<p>Gateway komponenta upravlja svojim specijaliziranim modulima, devicevima, cija
+zaduzenja su komunikacija s uredajima i pretvorba podataka koje prime preko te
+komunikacije u dogadaje. Ona se pokrece pozivom <code class="docutils literal notranslate"><span class="pre">hat-gateway</span></code> kojem se preko
+argument <code class="docutils literal notranslate"><span class="pre">--conf</span></code> zadaje konfiguracija u JSON ili YAML formatu. Konfiguracija
+je specificirana <a class="reference external" href="https://github.com/hat-open/hat-gateway/blob/master/schemas_json/main.yaml">JSON shemom</a>,
+a jedan minimalni primjer mogao bi biti:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">gateway</span>
+<span class="nt">event_server_address</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tcp+sbs://127.0.0.1:23012</span>
+<span class="nt">gateway_name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">gateway1</span>
+<span class="nt">devices</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="nt">module</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">devices.ammeter</span>
+      <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ammeter1</span>
+<span class="nt">log</span><span class="p">:</span>
+    <span class="nt">disable_existing_loggers</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">false</span>
+    <span class="nt">formatters</span><span class="p">:</span>
+        <span class="nt">default</span><span class="p">:</span> <span class="p p-Indicator">{}</span>
+    <span class="nt">handlers</span><span class="p">:</span>
+        <span class="nt">console</span><span class="p">:</span>
+            <span class="nt">class</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">logging.StreamHandler</span>
+            <span class="nt">level</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">INFO</span>
+            <span class="nt">stream</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ext://sys.stdout</span>
+    <span class="nt">root</span><span class="p">:</span>
+        <span class="nt">handlers</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">console</span>
+        <span class="nt">level</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">INFO</span>
+    <span class="nt">version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>Najzanimljiviji argumenti ovdje su nam <code class="docutils literal notranslate"><span class="pre">devices</span></code> i <code class="docutils literal notranslate"><span class="pre">gateway_name</span></code>.
+<code class="docutils literal notranslate"><span class="pre">gateway_name</span></code> ce nam biti bitan kasnije jer ce biti sadrzan u tipu dogadaja
+s kojim rade devicevi (i njihovi konzumenti). <code class="docutils literal notranslate"><span class="pre">devices</span></code> sadrzi postavke
+specijaliziranih modula, konfigurira se jedan device ciji modul je
+implementiran u <code class="docutils literal notranslate"><span class="pre">devices.ammeter</span></code> (gateway ce u nekom trenutku pozvati liniju
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">devices.ammeter</span></code>). On ima pridruzen i <code class="docutils literal notranslate"><span class="pre">name</span></code> koji ima slicnu svrhu
+kao i <code class="docutils literal notranslate"><span class="pre">gateway_name</span></code>, bit ce bitan kasnije jer ce biti sadrzan u tipu
+dogadaja konkretnog devicea. <code class="docutils literal notranslate"><span class="pre">log</span></code> polje mozda izgleda zastrasujuce, ali to
+je zapravo samo konfiguracija Pythonvog <code class="docutils literal notranslate"><span class="pre">logging</span></code>  modula koja se ovdje
+konfigurira da ispisuje logove na konzolu.</p>
+<p>Pogledajmo sada <a class="reference external" href="https://hat-gateway.hat-open.com/py_api/hat/gateway/common.html#hat.gateway.common.Device">sucelje</a>
+koje pojedina implementacija devicea mora zadovoljiti. Vidimo da ona mora biti
+izvedena kao Python modul, koji ima globalne varijable <code class="docutils literal notranslate"><span class="pre">device_type</span></code>,
+<code class="docutils literal notranslate"><span class="pre">json_schema_id</span></code> i <code class="docutils literal notranslate"><span class="pre">json_schema_repo</span></code>, te funkciju <code class="docutils literal notranslate"><span class="pre">create</span></code>.
+<code class="docutils literal notranslate"><span class="pre">device_type</span></code> sluzi za klasifikaciju tipa uredaja s kojim komuniciramo,
+obicno bude jednak imenu protokola koji se koristi. Namjena mu je slicna kao i
+ranije spomenutim <code class="docutils literal notranslate"><span class="pre">gateway_name</span></code> i <code class="docutils literal notranslate"><span class="pre">device_name</span></code> konfiguracijskim
+parametrima, budu elementi unutar tipa dogadaja koji se odnose na taj device.
+<code class="docutils literal notranslate"><span class="pre">json_schema_id</span></code> i <code class="docutils literal notranslate"><span class="pre">json_schema_repo</span></code> su opcionalni pa ih necemo koristiti,
+a odnose se na mogucnost konfiguriranja devicea. Svaki device moze propisivati
+svoju strukturu konfiguracije, a format za specifikaciju te strukture je JSON
+shema. Repo sadrzi shemu a ID kaze s kojim ID-em u shemi se konfiguracija
+usporeduje. Opcionalni su, tako da ce u nasim primjerima uvijek biti <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">create</span></code> funkcija zaduzena je za stvaranje instance klase <a class="reference external" href="https://hat-gateway.hat-open.com/py_api/hat/gateway/common.html#hat.gateway.common.Device">Device</a>.
+Po dokumentaciji, ona prima tri argumenta: event klijent, konfiguraciju i
+„prefiks” tipa dogadaja. S event klijentom smo se bavili u proslom dijelu,
+takvog klijenta primamo ovdje i mozemo ga koristiti na isti nacin. Moze se
+primjetiti da on nije bas istog tipa kao i event klijent iz proslog dijela,
+razlog tome je cinjenica da gateway komponenta stvara svoj wrapper oko
+originalne instance iz nekih infrastrukturnih razloga (jedan „pravi” klijent za
+cijeli gateway, odredba pretplata itd.). Konfiguracija je drugi argument, ona
+je jednaka bilo cemu sto se zapise u konfiguraciji gatewaya u elementima polja
+<code class="docutils literal notranslate"><span class="pre">devices</span></code>. Treci argument, prefiks tipa dogadaja je zapravo tuple stringova
+<code class="docutils literal notranslate"><span class="pre">('gateway',</span> <span class="pre">gateway_name,</span> <span class="pre">device_type,</span> <span class="pre">device_name)</span></code>. Za tip dogadaja smo
+odredili da je definiran kao tuple stringova, svi dogadaji s kojima device radi
+moraju imati ovaj prefiks. To znaci da svaki dogadaj kojeg device registrira bi
+trebao pocinjati s ova 4 stringa, npr. <code class="docutils literal notranslate"><span class="pre">('gateway',</span> <span class="pre">'gateway1',</span> <span class="pre">'iec104',</span>
+<span class="pre">'iec104_device1',</span> <span class="pre">'measurement_change')</span></code>, ako je ime gatewaya <code class="docutils literal notranslate"><span class="pre">gateway1</span></code>,
+tip devicea <code class="docutils literal notranslate"><span class="pre">iec104</span></code>, a ime <code class="docutils literal notranslate"><span class="pre">iec104_device1</span></code>. Gatway komponenta ne
+prisiljava da bude ovaj prefiks, to je samo dobra praksa. Ista stvar vrijedi i
+za primanje dogadaja, <code class="docutils literal notranslate"><span class="pre">receive</span></code> metoda event klijenta kojeg device primi u
+<code class="docutils literal notranslate"><span class="pre">create</span></code> funkciji vracati ce samo dogadaje kao da je pretplacena na
+<code class="docutils literal notranslate"><span class="pre">(*event_type_prefix,</span> <span class="pre">'*')</span></code>. Nije specificirano u prefiksu, ali nakon njega
+se obicno navodi smjer komunikacije, odnosno ako dogadaj registrira device onda
+je to <code class="docutils literal notranslate"><span class="pre">gateway</span></code> a ako ga registrira neki drugi aktor a device ga treba
+primati, smjer je <code class="docutils literal notranslate"><span class="pre">system</span></code>. Opet, komponenta ne prisiljava ovo ali se potice.</p>
+<p>Sad mozemo pogledati neku konkretnu implementaciju gateway devicea. Uzeti cemo
+raniji primjer s ampermetrima i pretvoriti klasu funkcije <code class="docutils literal notranslate"><span class="pre">Communication</span></code> i
+preraditi ju da vise ne zove <code class="docutils literal notranslate"><span class="pre">process</span></code>, vec samo registrira dogadaj i ne
+brine sto se dalje dogada s njim:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">hat.drivers</span> <span class="kn">import</span> <span class="n">iec104</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">hat.aio</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">hat.gateway.common</span>
+
+
+<span class="n">json_schema_id</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">json_schema_repo</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">device_type</span> <span class="o">=</span> <span class="s1">&#39;ammeter&#39;</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span> <span class="n">event_client</span><span class="p">,</span> <span class="n">event_type_prefix</span><span class="p">):</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">Device</span><span class="p">()</span>
+
+    <span class="n">device</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">Group</span><span class="p">()</span>
+    <span class="n">device</span><span class="o">.</span><span class="n">_event_client</span> <span class="o">=</span> <span class="n">event_client</span>
+    <span class="n">device</span><span class="o">.</span><span class="n">_event_type_prefix</span> <span class="o">=</span> <span class="n">event_type_prefix</span>
+    <span class="n">device</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">device</span><span class="o">.</span><span class="n">_main_loop</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">device</span>
+
+
+<span class="k">class</span> <span class="nc">Device</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">gateway</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Device</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">connection</span> <span class="o">=</span> <span class="k">await</span> <span class="n">iec104</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+            <span class="n">iec104</span><span class="o">.</span><span class="n">Address</span><span class="p">(</span><span class="s1">&#39;127.0.0.1&#39;</span><span class="p">,</span> <span class="mi">9999</span><span class="p">))</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">connection</span><span class="o">.</span><span class="n">receive</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_event_client</span><span class="o">.</span><span class="n">register</span><span class="p">([</span>
+                <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">RegisterEvent</span><span class="p">(</span>
+                    <span class="n">event_type</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_event_type_prefix</span><span class="p">,</span>
+                                <span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">asdu_address</span><span class="p">)),</span>
+                    <span class="n">source_timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">payload</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayload</span><span class="p">(</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayloadType</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+                        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">value</span><span class="p">))])</span>
+</pre></div>
+</div>
+<p>Jedna nejasnoca koja bi se mogla javiti citanjem ovog koda je svrha
+<code class="docutils literal notranslate"><span class="pre">hat.aio.Group</span></code> klase, koristenja njene <code class="docutils literal notranslate"><span class="pre">spawn</span></code> metode, njenog vracanja
+kroz property <code class="docutils literal notranslate"><span class="pre">async_group</span></code>, … Property <code class="docutils literal notranslate"><span class="pre">async_group</span></code> je potreban zbog
+sucelja koje propisuje <code class="docutils literal notranslate"><span class="pre">hat.gateway.common.Device</span></code> (on nasljeduje
+<code class="docutils literal notranslate"><span class="pre">hat.aio.Resource</span></code>, a on propisuje da mora postojati taj property). Ideja je
+da se instanca tog objekta koristi za odredivanje zivotnog ciklusa devicea.
+Instanca moze biti u otvorenom ili zatvorenom stanju, otvoreno stanje oznacava
+da device treba raditi, a zatvoreno da ne treba. Metoda <code class="docutils literal notranslate"><span class="pre">spawn</span></code> od grupe
+ponasa se slicno kao <a class="reference external" href="https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task">asyncio.create_task</a>,
+glavna razlika je da Task koji bi se vratio se veze uz stanje otvorenosti grupe
+- ako se grupa ikad zatvori, Task ce se otkazati (poziv <code class="docutils literal notranslate"><span class="pre">Task.cancel</span></code>) - ovo
+nam ide u korist jer onda stanje otvorenosti grupe zaista upravlja cinjenicom
+izvrsava li se <code class="docutils literal notranslate"><span class="pre">_main_loop</span></code> ili ne.</p>
+<p>Jedan detalj nismo spomenuli, a bitan je za pokretanje gatewaya s deviceom, je
+potreba za registracijom dogadaja za paljenje devicea. U <a class="reference external" href="https://hat-gateway.hat-open.com/gateway.html#event-server-communication">dokumentaciji</a>
+mozemo vidjeti kakvu strukturu imaju ti dogadaji. Dakle, potrebno je
+registrirati dogadaj s tipom <code class="docutils literal notranslate"><span class="pre">(*prefiks,</span> <span class="pre">'system',</span> <span class="pre">'enable')</span></code> i payloadom
+<code class="docutils literal notranslate"><span class="pre">True</span></code> jer to signalizira gateway komponenti da pokrene device koji smo
+konfigurirali.  Najjednostavnije to mozemo napraviti s odvojenom skriptom:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.event.client</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">async_main</span><span class="p">():</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="k">await</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+        <span class="s1">&#39;tcp+sbs://127.0.0.1:23012&#39;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">register_with_response</span><span class="p">([</span>
+        <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">RegisterEvent</span><span class="p">(</span>
+            <span class="n">event_type</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="s1">&#39;gateway1&#39;</span><span class="p">,</span> <span class="s1">&#39;ammeter&#39;</span><span class="p">,</span>
+                        <span class="s1">&#39;ammeter1&#39;</span><span class="p">,</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;enable&#39;</span><span class="p">),</span>
+            <span class="n">source_timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">payload</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayload</span><span class="p">(</span>
+                <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayloadType</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+                <span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))])</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">async_main</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Jos detalja za pokretanje, event server mora biti startan, gateway ga ocekuje
+na adresi <code class="docutils literal notranslate"><span class="pre">tcp+sbs://127.0.0.1:23012</span></code>. Uz to, treba pokrenuti i simulator iz
+prvog zadatka, inace ce device izbaciti exception jer connect nece proci.</p>
+<p>Prilagodimo li sad naseg ranijeg konzumenta dogadaja (ili skriptu za upite) da
+prate dogadaje tipa <code class="docutils literal notranslate"><span class="pre">('gateway',</span> <span class="pre">'gateway1',</span> <span class="pre">'ammeter',</span> <span class="pre">'ammeter1',</span> <span class="pre">'*')</span></code>,
+vidjeli bismo da se zaista registriraju ovi dogadaji, nakon <code class="docutils literal notranslate"><span class="pre">ammeter</span></code> dijela
+je identifikator mjerenja (ASDU adresa iz proslog zadatka), a payload je broj
+koji predstavlja iznos mjerenja. Ako ima problema oko starta gatewaya, tipa
+dolazi do ispisa greske <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">module</span> <span class="pre">named</span> <span class="pre">...</span></code>, dodajte direktorij iz kojeg
+pokrecete u environment varijablu <code class="docutils literal notranslate"><span class="pre">PYTHONPATH</span></code> (<a class="reference external" href="https://askubuntu.com/a/58828">linux (bash)</a>, <a class="reference external" href="http://www.dowdandassociates.com/blog/content/howto-set-an-environment-variable-in-windows-command-line-and-registry/">windows</a>).</p>
+<p>Iduci korak je procesna logika u kojem cemo razviti specijalizirani modul koji
+ce primati informacije o strujama od devicea i stvarati nove dogadaje na
+temelju njih.</p>
+</section>
+<section id="event-server">
+<h2>Event server<a class="headerlink" href="#event-server" title="Link na taj naslov">¶</a></h2>
+<img alt="../_images/hat-arch-event.png" src="../_images/hat-arch-event.png" />
+<p>Event server smo vec vidjeli u situacijama gdje implementira sabirnicu
+dogadaja, a sad cemo vidjeti kako pomocu njegovih specijaliziranih modula
+mozemo implementirati procesnu logiku aplikacije. Ona se izvodi tako da se
+specijalizirani moduli event servera pretplate na dogadaje odredenog tipa i,
+kad se dogadaji s tim tipom registriraju, stvore nove dogadaje na temelju njih.</p>
+<p>Mozemo preuzeti konfiguraciju iz proslog dijela, glavna razlika je da cemo sad
+u <code class="docutils literal notranslate"><span class="pre">module_engine/modules</span></code> dodati konfiguraciju specijaliziranog modula:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">event</span>
+<span class="nt">backend_engine</span><span class="p">:</span>
+    <span class="nt">backend</span><span class="p">:</span>
+        <span class="nt">module</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hat.event.server.backends.dummy</span>
+    <span class="nt">server_id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nt">communication</span><span class="p">:</span>
+    <span class="nt">address</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tcp+sbs://127.0.0.1:23012</span>
+<span class="nt">module_engine</span><span class="p">:</span>
+    <span class="nt">modules</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">module</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">modules.state</span>
+<span class="nt">log</span><span class="p">:</span>
+    <span class="nt">disable_existing_loggers</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">false</span>
+    <span class="nt">formatters</span><span class="p">:</span>
+        <span class="nt">default</span><span class="p">:</span> <span class="p p-Indicator">{}</span>
+    <span class="nt">handlers</span><span class="p">:</span>
+        <span class="nt">console</span><span class="p">:</span>
+            <span class="nt">class</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">logging.StreamHandler</span>
+            <span class="nt">level</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">INFO</span>
+            <span class="nt">stream</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ext://sys.stdout</span>
+    <span class="nt">root</span><span class="p">:</span>
+        <span class="nt">handlers</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">console</span>
+        <span class="nt">level</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">INFO</span>
+    <span class="nt">version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>Dakle, u odnosu na dio gdje smo se fokusirali na nacin kako slati dogadaje
+preko event servera, ovdje je razlika da smo dodali specijalizirani modul
+<code class="docutils literal notranslate"><span class="pre">modules.state</span></code> (kao i kod gatewaya, ovo je Python ime modula, u nekom
+trenutku event server ce zvati <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">modules.state</span></code>).</p>
+<p>Sad je potrebno zaista implementirati modul. Gledanjem <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/server/common.html#hat.event.server.common.Module">dokumentacije</a>,
+mozemo vidjeti da se to radi tako da definiramo modul tako da implementiramo
+Python modul koji ima globalne varijable <code class="docutils literal notranslate"><span class="pre">json_schema_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">json_schema_repo</span></code> i funkciju <code class="docutils literal notranslate"><span class="pre">create</span></code>. Kod globalnih varijabli vrijedi
+ista prica kao i kod deviceva, a <code class="docutils literal notranslate"><span class="pre">create</span></code> je korutina koja vraca instancu
+klase <code class="docutils literal notranslate"><span class="pre">hat.event.server.common.Module</span></code>. Ona prima konfiguraciju modula i
+referencu na instancu klase <code class="docutils literal notranslate"><span class="pre">hat.event.module_engine.ModuleEngine</span></code>.
+Konfiguracija modula je iz konfiguracije cijelog event servera, ono sto je
+napisano uz <code class="docutils literal notranslate"><span class="pre">module:</span> <span class="pre">&lt;Python</span> <span class="pre">ime</span> <span class="pre">modula&gt;</span></code>, a module engine je objekt koji
+sluzi kao sucelje event servera prema modulu. Ako pogledamo <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/server/module_engine.html">njegovu
+dokumentaciju</a>,
+vidimo da ima slicne metode kao event klijent.</p>
+<p>Kao i device, modul nasljeduje <code class="docutils literal notranslate"><span class="pre">hat.aio.Resource</span></code> abstraktnu klasu, pa mora
+imati <code class="docutils literal notranslate"><span class="pre">async_group</span></code> property.  Uz njega, ima i property <code class="docutils literal notranslate"><span class="pre">subscription</span></code>
+kojim se specificira na kakve dogadaje se modul pretplacuje (mala razlika je da
+to sad vise nije lista tupleova, vec se predaje
+<code class="docutils literal notranslate"><span class="pre">hat.event.common.subscription.Subscription</span></code> objektu).</p>
+<p>Metoda <code class="docutils literal notranslate"><span class="pre">create_session</span></code> je iduca komplikacija. Ideja je da moduli zapravo ne
+obavljaju registraciju dogadaja sami po sebi, vec da stvaraju sesije koje to
+rade za njih. Ovo je vise do implementacijskih detalja event servera, gdje kad
+se registrira dogadaj, event server stvori sesiju svakog modula i onda, ako se
+modul pretplacuje na dogadaj koji se registrirao, koristi tu sesiju da stvori
+nove dogadaje. Implementator modula ima korist od toga jer moze imati
+distinkciju izmedu razlicitih sekvenci obrada podataka, necega za cime nemamo
+potrebu u sklopu nasih zadataka - zbog toga cemo obradu podataka u sesiji
+obicno samo proslijediti nazad modulu. <code class="docutils literal notranslate"><span class="pre">create_session</span></code> ne prima nikakve
+argumente, a vraca instancu objekta <code class="docutils literal notranslate"><span class="pre">hat.event.server.common.ModuleSession</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ModuleSession</span></code> je abstraktna klasa koja nasljeduje <code class="docutils literal notranslate"><span class="pre">hat.aio.Resource</span></code>,
+dakle ima property <code class="docutils literal notranslate"><span class="pre">async_group</span></code> iz istih razloga kao i device i modul. Uz
+to, ima i metodu <code class="docutils literal notranslate"><span class="pre">process</span></code> koja prima i vraca listu dogadaja. Lista koju
+prima je sadrzi dogadaje na koje se modul predplacuje kroz <code class="docutils literal notranslate"><span class="pre">subscription</span></code>
+property, a lista koju vraca je sadrzi nove dogadaje koje zeli registrirati.
+Mala razlika u odnosu na dosadasnji rad s registracijom dogdaja je da se ovdje
+ne koristi <code class="docutils literal notranslate"><span class="pre">RegisterEvent</span></code>, vec je potrebno vratiti
+<code class="docutils literal notranslate"><span class="pre">hat.event.server.common.ProcessEvent</span></code>. On se stvara pozivom module engineove
+metode <code class="docutils literal notranslate"><span class="pre">create_process_event</span></code>. On prima dogadaj i identifikator izvora
+dogadaja, <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/server/common.html#hat.event.server.common.Source">hat.event.server.common.Source</a>,
+pa je dodatno u sesiji potrebno negdje drzati referencu i na njega.</p>
+<p>Uz sve ovo imamo dovoljno informacija da napravimo primjer event server modula.
+Uzeti cemo opet slucaj iz prvog zadatka s ampermetrima, a ovdje cemo napraviti
+modul koji ce raditi istu stvar kao i <code class="docutils literal notranslate"><span class="pre">Processing</span></code> klasa, uparivanje
+primljenog mjerenja sa strujama I1, I2 i I3, te racunanje struje I4. Ona bi
+izgledala ovako:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.aio</span>
+<span class="kn">import</span> <span class="nn">hat.event.server.common</span>
+
+
+<span class="n">json_schema_id</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">json_schema_repo</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span> <span class="n">engine</span><span class="p">):</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">Module</span><span class="p">()</span>
+
+    <span class="k">global</span> <span class="n">_source_id</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Source</span><span class="p">(</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">SourceType</span><span class="o">.</span><span class="n">MODULE</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;modules.state&#39;</span><span class="p">,</span>
+        <span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">module</span><span class="o">.</span><span class="n">_subscription</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Subscription</span><span class="p">([</span>
+        <span class="p">(</span><span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="s1">&#39;gateway1&#39;</span><span class="p">,</span> <span class="s1">&#39;ammeter&#39;</span><span class="p">,</span> <span class="s1">&#39;ammeter1&#39;</span><span class="p">,</span> <span class="s1">&#39;gateway&#39;</span><span class="p">,</span> <span class="s1">&#39;?&#39;</span><span class="p">)])</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">Group</span><span class="p">()</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_engine</span> <span class="o">=</span> <span class="n">engine</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;I1&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;I2&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;I3&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;I4&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">module</span>
+
+
+<span class="k">class</span> <span class="nc">Module</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">subscription</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subscription</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">create_session</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Session</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">create_subgroup</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">module_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">changes</span><span class="p">):</span>
+        <span class="n">event</span> <span class="o">=</span> <span class="n">changes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># dohvat zadnjeg elementa tipa dogadaja, za uparivanje s I1, I2, I3</span>
+        <span class="n">measurement_id</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">event_type</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;0&#39;</span><span class="p">:</span> <span class="s1">&#39;I1&#39;</span><span class="p">,</span>
+                   <span class="s1">&#39;1&#39;</span><span class="p">:</span> <span class="s1">&#39;I2&#39;</span><span class="p">,</span>
+                   <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="s1">&#39;I3&#39;</span><span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">measurement_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="n">current</span><span class="p">]</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">payload</span><span class="o">.</span><span class="n">data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="s1">&#39;I4&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="s1">&#39;I1&#39;</span><span class="p">]</span>
+                             <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="s1">&#39;I2&#39;</span><span class="p">]</span>
+                             <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">[</span><span class="s1">&#39;I3&#39;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_engine</span><span class="o">.</span><span class="n">create_process_event</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">,</span>
+                <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">RegisterEvent</span><span class="p">(</span>
+                    <span class="n">event_type</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;state&#39;</span><span class="p">,</span> <span class="p">),</span>
+                    <span class="n">source_timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">payload</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayload</span><span class="p">(</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">EventPayloadType</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+                        <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">)))]</span>
+
+
+<span class="k">class</span> <span class="nc">Session</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ModuleSession</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">group</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_module</span> <span class="o">=</span> <span class="n">module</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_group</span> <span class="o">=</span> <span class="n">group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_group</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">changes</span><span class="p">):</span>
+        <span class="c1"># delegacija obrade dogadaja nazad modulu</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module</span><span class="o">.</span><span class="n">module_process</span><span class="p">(</span><span class="n">changes</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Ovaj modul pretplacuje se na dogadaje koje registrira device i kreira svoje
+dogadaje koji sadrze stanje, u istom formatu kao i u prvom zadatku.</p>
+</section>
+<section id="gui-server">
+<h2>GUI server<a class="headerlink" href="#gui-server" title="Link na taj naslov">¶</a></h2>
+<img alt="../_images/hat-arch-gui.png" src="../_images/hat-arch-gui.png" />
+<p>Zadnja komponenta na koju se fokusiramo je GUI server, a ona sluzi za
+vizualizaciju podataka. Ona se, s jedne strane, spaja na event server i
+ukljucuje u interakciju s dogadajima, a, s druge, posluzuje HTTP servis na koji
+se korisnici mogu spojiti svojim web browserima i pregledati stanje sustava.
+Stanje sustava prezentira se kroz genericnu web aplikaciju, koja se moze
+konfigurirati da prikazuje preglede koje implementator sustava implementira.
+Aplikacija je implementirana u JavaScriptu i komunicira s GUI serverom pomocu
+WebSocket protokola, odnosno <a class="reference external" href="https://hat-juggler.hat-open.com/">hat-juggler</a>
+wrappera. Konkretan format stanja koje GUI server salje klijentskoj aplikaciji
+propisuju specijalizirani moduli GUI servera, adapteri.</p>
+<p>Komponenta se pokrece pozivom <code class="docutils literal notranslate"><span class="pre">hat-gui</span></code> u komandnoj liniji. Zadaje joj se
+argument <code class="docutils literal notranslate"><span class="pre">--conf</span></code> koji sadrzi putanju do JSON ili YAML konfiguracije koja
+sadrzi konkretne postavke. Format konfiguracije propisan je <a class="reference external" href="https://github.com/hat-open/hat-gui/blob/master/schemas_json/main.yaml">JSON shemom</a>, a
+jedan minimalni primjer mogao bi biti:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">gui</span>
+<span class="nt">event_server_address</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tcp+sbs://127.0.0.1:23012</span>
+<span class="nt">address</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">http://0.0.0.0:23023</span>
+<span class="nt">views</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">login</span>
+    <span class="nt">view_path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">./views/login</span>
+    <span class="nt">conf_path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">null</span>
+  <span class="p p-Indicator">-</span> <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">main</span>
+    <span class="nt">view_path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">./views/main</span>
+    <span class="nt">conf_path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="nt">initial_view</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">login</span>
+<span class="nt">users</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">user1</span>
+    <span class="nt">password</span><span class="p">:</span>
+        <span class="nt">hash</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">0927f26c1e200037ef44e622d39d5b7c201690c85b9aa86545d6583ecff2b02f</span>
+        <span class="nt">salt</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">7af08c40f25d800fa3d1ab3f8199adbd</span>
+    <span class="nt">roles</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">user</span>
+    <span class="nt">view</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="nt">adapters</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">module</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">adapters.state</span>
+    <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">state</span>
+<span class="nt">log</span><span class="p">:</span>
+    <span class="nt">disable_existing_loggers</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">false</span>
+    <span class="nt">formatters</span><span class="p">:</span>
+        <span class="nt">default</span><span class="p">:</span> <span class="p p-Indicator">{}</span>
+    <span class="nt">handlers</span><span class="p">:</span>
+        <span class="nt">console</span><span class="p">:</span>
+            <span class="nt">class</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">logging.StreamHandler</span>
+            <span class="nt">level</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">INFO</span>
+            <span class="nt">stream</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ext://sys.stdout</span>
+    <span class="nt">root</span><span class="p">:</span>
+        <span class="nt">handlers</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">console</span>
+        <span class="nt">level</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">INFO</span>
+    <span class="nt">version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>Konfiguriraju se razne adrese, jedna za spajanje s event serverom, druga na
+kojoj GUI server posluzuje podatke… Konfiguriraju se i viewovi, to su
+spomenuti pregledi koje mi trebamo implementirati. Nakon toga slijedi
+konfiguracija korisnika. GUI server obavlja rudimentarno upravljanje
+korisnicima, u konfiguraciji se navode login podatci. Za lozinke se ocekuje da
+su hashirane SHA256 algoritmom, i da je <a class="reference external" href="https://en.wikipedia.org/wiki/Salt_(cryptography)">„posoljen”</a> s nasumicnim bajtima u
+<code class="docutils literal notranslate"><span class="pre">salt</span></code> polju i ponovno hashiran. Za potrebe nasih primjera, ove stvari ce
+biti hardkodirane, uvijek koristimo postavke iz ove konfiguracije, a za
+korisnika <code class="docutils literal notranslate"><span class="pre">user1</span></code> lozinka je <code class="docutils literal notranslate"><span class="pre">pass1</span></code>. Uz login podatke a korisnika se moze
+definirati koju ulogu (<code class="docutils literal notranslate"><span class="pre">role</span></code>) ima - na ovaj nacin moze se napraviti
+distinkcija izmedu administratora i obicnih korisnika te koji view korisnik
+vidi nakon sto se prijavi. Konacno, nakon korisnika ide konfiguracija
+specijaliziranih modula, adaptera. Vidimo slicnu strukturu kao i kod
+gatewayovih deviceva, zadaje se Python ime modula (npr. ovdje ce se u nekom
+trenutku zvati <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">adapters.state</span></code>) i ime adaptera koje ce se koristiti
+da identificira taj adapter u komunikaciji s event serverom i klijentskom
+aplikacijom.</p>
+<p>Razvoj viewova, odnosno grafickih prikaza je tema za sebe koja ce biti
+pokrivena u odvojenom poglavlju. U ovom primjeru koristiti cemo gotovu,
+izbuildanu verziju viewova, a GUI server cemo samo konfigurirati da koristi te
+prikaze.</p>
+<p>Glavni dio razvoja na serverskoj strani je implementacija adaptera. Pogledajmo
+sad <a class="reference external" href="https://hat-gui.hat-open.com/py_api/hat/gui/common.html#hat.gui.common.Adapter">sucelje</a>
+koje ovi specijalizirani moduli moraju implementirati. Vidimo da on mora biti
+izveden kao odvojeni Python modul s globalnim varijablama <code class="docutils literal notranslate"><span class="pre">json_schema_id</span></code> i
+<code class="docutils literal notranslate"><span class="pre">json_schema_repo</span></code> te funkcijama <code class="docutils literal notranslate"><span class="pre">create_subscription</span></code> i
+<code class="docutils literal notranslate"><span class="pre">create_adapter</span></code>. Za globalne varijable vrijede iste primjedbe kao i kod
+deviceva i event server modula, to su opcionalne varijabe koje sluze za
+validaciju konfiguracije koja je postavljena te ce biti <code class="docutils literal notranslate"><span class="pre">None</span></code> u nasim
+primjerima. <code class="docutils literal notranslate"><span class="pre">create_subscription</span></code> treba moci primiti jedan argument,
+konfiguraciju adaptera, a vraca instancu <a class="reference external" href="https://hat-event.hat-open.com/py_api/hat/event/common/index.html#hat.event.common.Subscription">hat.event.common.Subscription</a>
+klase u kojoj se navodi na kakve tipove dogadaja se adapter pretplacuje.
+Konacno, <code class="docutils literal notranslate"><span class="pre">create_adapter</span></code> funkcija prima konfiguraciju adaptera i event
+klijent, a vraca instancu klase <code class="docutils literal notranslate"><span class="pre">hat.gui.common.Adapter</span></code>.</p>
+<p>Ako pogledamo klasu <code class="docutils literal notranslate"><span class="pre">hat.gui.common.Adapter</span></code> vidimo da ona nasljeduje
+<code class="docutils literal notranslate"><span class="pre">hat.aio.Resource</span></code>, dakle, kao i devicevi i event server moduli, mora imati
+property <code class="docutils literal notranslate"><span class="pre">async_group</span></code>. Uz to sama adapterova klasa propisuje da mora
+postojati metoda <code class="docutils literal notranslate"><span class="pre">create_session</span></code> koja prima jedan argument tipa
+<a class="reference external" href="https://hat-gui.hat-open.com/py_api/hat/gui/common.html#hat.gui.common.AdapterSessionClient">hat.gui.common.AdapterSessionClient</a>.
+Slicno kao i moduli event servera, adapteri nece sami direktno komunicirati sa
+svojim klijetima, vec imaju sesije. U ovom kontekstu, jedna sesija predstavlja
+vezu na jednog klijenta koji je spojen na GUI server (mozemo to zamisliti kao
+da svaka otvorena sesija predstavlja jedan web browser koji je spojen na nas
+server). Vidimo da <a class="reference external" href="https://hat-gui.hat-open.com/py_api/hat/gui/common.html#hat.gui.common.AdapterSession">hat.gui.common.AdapoterSession</a>
+zapravo nema nikakve dodatne metode i propertyje (osim, opet, <code class="docutils literal notranslate"><span class="pre">async_group</span></code>
+jer je instance <code class="docutils literal notranslate"><span class="pre">hat.aio.Resource</span></code>). To znaci da imamo slobodu bilo kako
+implementirati kako se tocno koristi <code class="docutils literal notranslate"><span class="pre">AdapterSessionClient</span></code> za komunikaciju s
+klijentima.</p>
+<p>Preko <code class="docutils literal notranslate"><span class="pre">AdapterSessionClient</span></code>-a adapterova sesija komunicira s web aplikacijom
+u browseru. Vidimo da ona ima slicne metode i propertyje kao i <a class="reference external" href="https://hat-juggler.hat-open.com/python.html">juggler
+konekcija</a> (jer nam GUI server
+zapravo predaje wrapper oko nje). Kod jugglera je ideja da povezuje dvije
+komunikacijske tocke s WebSocket protokolom. WebSocket se inace specijalizira
+za slanje poruka, a juggler nam pruza podrsku za neke dodatne funkcije. Jedna
+od tih funkcija je sinkronizacija stanja - vidimo da <code class="docutils literal notranslate"><span class="pre">Connection</span></code> (i
+<code class="docutils literal notranslate"><span class="pre">AdapterSessionClient</span></code>) ima propertyje <code class="docutils literal notranslate"><span class="pre">local_data</span></code> i <code class="docutils literal notranslate"><span class="pre">remote_data</span></code>.
+Jedna strana komunikacije moze u <code class="docutils literal notranslate"><span class="pre">local_data</span></code> zapisati bilo kakav JSON
+serijalizabilni objekt (preko metode <code class="docutils literal notranslate"><span class="pre">set_local_data</span></code>), i on ce se drugoj
+strani pojaviti u njenom <code class="docutils literal notranslate"><span class="pre">remote_data</span></code> propertyju. Uz to, moguce je raditi i
+obicno slanje poruka kroz <code class="docutils literal notranslate"><span class="pre">send</span></code> i <code class="docutils literal notranslate"><span class="pre">receive</span></code> metode, definirati RPC sucelja
+itd. Prakticno, u radu s jugglerom, odnosno <code class="docutils literal notranslate"><span class="pre">AdapterSessionClient</span></code>-om,
+najvise cemo se oslanjati na sinkronizaciju stanja i slanje poruka.</p>
+<p>Sad imamo dovoljno informacija da napravimo jednostavnu implementaciju
+adaptera. Nastavljamo s nasim primjerom ranijeg zadatka s ampermetrima. Ako se
+sjecamo, napravili smo modul event servera koji registrira dogadaj tipa
+<code class="docutils literal notranslate"><span class="pre">('state')</span></code> ciji payload je dictionary gdje su kljucevi imena struja, a
+vrijednosti njihovi iznosi. Sad mozemo napraviti adapter koji ce to stanje
+propagirati do klijenata:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">hat.aio</span>
+<span class="kn">import</span> <span class="nn">hat.event.common</span>
+<span class="kn">import</span> <span class="nn">hat.gui.common</span>
+<span class="kn">import</span> <span class="nn">hat.util</span>
+
+
+<span class="n">json_schema_id</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">json_schema_repo</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_subscription</span><span class="p">(</span><span class="n">conf</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">hat</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Subscription</span><span class="p">([(</span><span class="s1">&#39;state&#39;</span><span class="p">,</span> <span class="p">)])</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_adapter</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span> <span class="n">event_client</span><span class="p">):</span>
+    <span class="n">adapter</span> <span class="o">=</span> <span class="n">Adapter</span><span class="p">()</span>
+
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">hat</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">Group</span><span class="p">()</span>
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_event_client</span> <span class="o">=</span> <span class="n">event_client</span>
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">adapter</span><span class="o">.</span><span class="n">_main_loop</span><span class="p">)</span>
+    <span class="n">adapter</span><span class="o">.</span><span class="n">_sessions</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">adapter</span>
+
+
+<span class="k">class</span> <span class="nc">Adapter</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">gui</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Adapter</span><span class="p">):</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">create_session</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">juggler_client</span><span class="p">):</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">Session</span><span class="p">(</span>
+            <span class="n">juggler_client</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span><span class="o">.</span><span class="n">create_subgroup</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sessions</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">session</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">events</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_event_client</span><span class="o">.</span><span class="n">receive</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">payload</span><span class="o">.</span><span class="n">data</span>
+                <span class="k">for</span> <span class="n">session</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sessions</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">is_open</span><span class="p">:</span>
+                        <span class="n">session</span><span class="o">.</span><span class="n">notify_state_change</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">Session</span><span class="p">(</span><span class="n">hat</span><span class="o">.</span><span class="n">gui</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">AdapterSession</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">juggler_client</span><span class="p">,</span> <span class="n">group</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_juggler_client</span> <span class="o">=</span> <span class="n">juggler_client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span> <span class="o">=</span> <span class="n">group</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">async_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_group</span>
+
+    <span class="k">def</span> <span class="nf">notify_state_change</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_juggler_client</span><span class="o">.</span><span class="n">set_local_data</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Ako ima nejasnoca vezanih uz poziv <code class="docutils literal notranslate"><span class="pre">spawn</span></code> metode, logika je ista kao i kod
+devicea, pa predlazemo da pogledate taj dio. Dakle, adapter u <code class="docutils literal notranslate"><span class="pre">_main_loop</span></code>
+ceka promjene stanja i kad primi dogadaj, proslijedi tu informaciju sesijama.
+Sesije onda dalje tu informaciju proslijede web klijentima.</p>
+<p>Sad mozemo pokrenuti <code class="docutils literal notranslate"><span class="pre">hat-gui</span></code> s ovim adapterom, no jos uvijek nam fale
+viewovi. Kako smo spomenuli da je njihov razvoj odvojena tema za sebe, zasad
+cemo koristiti prethodno buildane resurse. Njima, i svim ostalim
+implementacijama koje smo radili u ovom poglavlju, mozete pristupiti na <a class="reference external" href="https://github.com/rppiot2021/materials/tree/master/hat/components">ovom
+linku</a>
+Pokretanjem svega (<code class="docutils literal notranslate"><span class="pre">hat-event</span></code>, <code class="docutils literal notranslate"><span class="pre">hat-gateway</span></code> i <code class="docutils literal notranslate"><span class="pre">hat-gui</span></code>) i otvaranjem
+adrese <a class="reference external" href="http://127.0.0.1:23023">127.0.0.1:23023</a> trebala bi se otvoriti prvo
+login stranica (user1, pass1), a nakon logina prikaz u kojem se vidi JSON
+reprezentacija stanja koje smo propagirali kroz dogadaje. Iduce vece poglavlje
+bavit ce se osnovama razvoja grafickog sucelja u bibliotekama iz hat-open
+projekta.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">RPPIOT prakticni materijali</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigacija</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../01-architecture/index.html">Arhitektura</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../02-modbus-console/index.html">Modbus konzolna aplikacija</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Hat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../03-hat-modbus-workshop/index.html">Modbus hat aplikacija</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Hat</a><ul>
+      <li>Previous: <a href="event_bus.html" title="Prijašnje poglavlje">hat-event (event bus)</a></li>
+      <li>Next: <a href="../03-hat-modbus-workshop/index.html" title="sljedeće poglavlje">Modbus hat aplikacija</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Brzo pretraživanje</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Traži" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Koncar Digital, Fakultet Elektrotehnike i Racunarstva.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/hat/components.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
