@@ -42,9 +42,9 @@ koristiti `hat-drivers <https://hat-drivers.hat-open.com>`_ paket, ovaj put
 <https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/index.html>`_.
 Vidimo kako ona ima razne funkcije za kreiranje konekcije, na temelju tipa
 konekcije koju zelimo otvoriti cemo odabrati jednu od ``create_...`` funkcija.
-S obzirom da se uredaj ponasa kao slave, to znaci da ce se nasa konzolna
-aplikacija ponasati kao master. Dodatno, komuniciramo preko TCP-a, ne preko
-serial porta, tako da cemo koristiti funkciju
+S obzirom da se uredaj ponasa kao slave (posluzitelj), to znaci da ce se nasa
+konzolna aplikacija ponasati kao master (klijent). Dodatno, komuniciramo preko
+TCP-a, ne preko serial porta, tako da cemo koristiti funkciju
 `hat.drivers.modbus.create_tcp_master
 <https://hat-drivers.hat-open.com/py_api/hat/drivers/modbus/index.html#hat.drivers.modbus.create_tcp_master>`_.
 Ova funkcija prima dva obvezna argumenta, ``modbus_type`` i ``address``.

@@ -24,8 +24,8 @@ onda komponenta vise brine za "infrastrukturne" stvari, poput spajanja na event
 server, suradivanja sa specijaliziranim modulima, itd., a specijalizirani
 moduli implementiraju aplikaciju.
 
-Prije nego sto se bacimo na konkretne komponente, kratki pregled terminologije
-koju cemo koristiti od sad:
+Prije nego sto krenemo prolaziti konkretne komponente, kratki pregled
+terminologije koju cemo koristiti od sad:
 
   * device - specijalizirani modul gateway komponente
   * modul - specijalizirani modul event servera
@@ -333,9 +333,9 @@ najvise cemo se oslanjati na sinkronizaciju stanja i slanje poruka.
 Sad imamo dovoljno informacija da napravimo jednostavnu implementaciju
 adaptera. Nastavljamo s nasim primjerom ranijeg zadatka s ampermetrima. Ako se
 sjecamo, napravili smo modul event servera koji registrira dogadaj tipa
-``('state')`` ciji payload je dictionary gdje su kljucevi imena struja, a
-vrijednosti njihovi iznosi. Sad mozemo napraviti adapter koji ce to stanje
-propagirati do klijenata:
+``('state')`` ciji payload je mapa gdje su kljucevi imena struja, a vrijednosti
+njihovi iznosi. Sad mozemo napraviti adapter koji ce to stanje propagirati do
+klijenata:
 
 .. literalinclude:: components/adapters/state.py
    :language: python

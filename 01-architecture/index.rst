@@ -73,7 +73,7 @@ konkurentnih metoda (vise o koristima ``asyncio``-a mozete vidjeti u sluzbenoj
 dokumentaciji). Prakticno, to nam omogucava da koristimo ``iec104.connect``
 funkciju.
 
-"Grubo" rjesenje
+Osnovno rjesenje
 ''''''''''''''''
 
 U ovom dijelu razviti cemo rjesenje koje prakticno rjesava problem, ali ne
@@ -81,9 +81,14 @@ uzima u obzir dobre organizacijske prakse kojih se drzimo ako odaberemo neku
 arhitekturu. Umjesto postojanja tri nezavisne, specijalizirane komponente,
 cijeli IoT sustav bit ce implementiran u jednoj ``while`` petlji.
 
-Prvi korak je otvaranje veze na ampermetre, moguce ga je napraviti pozivom
-``await iec104.connect(iec104.Address('127.0.0.1', 9999))``. Ovdje je adresa
-predana kroz strukturu podataka specificiranu od strane `drivera
+Prije pocetka rada na implementaciji rjesenja, potrebno je pokrenuti simulator.
+To se radi prema uputama `u
+repozitoriju <https://github.com/rppiot2021/01-architecture>`_.
+
+Prvi korak kod same implementacije je otvaranje veze na ampermetre, moguce ga
+je napraviti pozivom ``await iec104.connect(iec104.Address('127.0.0.1',
+9999))`` (ako pokrenutom simulatoru ne specificiramo neku drugu adresu). Ovdje
+je adresa predana kroz strukturu podataka specificiranu od strane `drivera
 <https://hat-drivers.hat-open.com/py_api/hat/drivers/iec104/connection.html#hat.drivers.iec104.connection.Address>`_.
 
 Nakon sto smo se spojili na ampermetar, zelimo ocitavati podatke s njega.
@@ -121,17 +126,18 @@ podataka preko istog sucelja, zapisana je instanca klase
 To oznacava da je preko protokola primljen realni broj i da mu se moze
 pristupiti preko varijable ``hat.drivers.iec104.FloatingValue.value``. Dakle,
 do identifikatora ampermetra dolazimo preko ``data[0].asdu_address``, a do
-iznosa ocitanog na ampermetru preko ``data[0].value.value``. ``[0]`` je
-potreban jer je preko ``receive`` metode moguce primiti vise od jednog podatka,
-no zadatak je postavljen tako da se uvijek notificira jedna promjena pa je
-ovakav hack prihvatljiv.
+iznosa ocitanog na ampermetru preko ``data[0].value.value``. Dodatno, IEC104
+protokol uvijek moze poslati vise podataka odjednom, pa je u implmentaciji
+drivera to realizirano tako da ``receive`` vraca listu ``iec104.Data``
+podataka. Zbog toga je potrebno i indeksiranje te liste s ``[0]``, jer je
+implementacija simulatora napravljena tako da uvijek registrira jedan podatak.
 
 Dodatni zahtjev je kontinuirano izracunavanje vrijednosti I4, zbroja ostale tri
 struje, i njegov kontinuirani ispis na konzoli. Radi jednostavnosti provjere,
 ispisivati cemo stanje sve tri struje uz I4. Uz to, radi urednosti ispisa,
 dodatno cemo zaokruziti sve vrijednosti na dvije decimale. Stanja cemo cuvati u
-dictionary-ju gdje su nam kljucevi imena struja, a vrijednosti njihovi iznosi.
-Mozemo ga izvesti ovako:
+mapi (Pythonov dictionary) gdje su nam kljucevi imena struja, a vrijednosti
+njihovi iznosi.  Mozemo ga izvesti ovako:
 
 .. literalinclude:: solutions/3_no_architecture.py
    :language: python
@@ -140,43 +146,58 @@ Ispis ce sada izgledati ovako:
 
 .. image:: images/output2.png
 
-Ovime smo zadovoljili minimalne potrebe zadatka, no ne mozemo tvrditi da je
-rjesenje dugorocno odrzivo. Ako se potrebe promijene, npr. zelimo komunicirati
-s drugim protokolom, potrebna su dodatna mjerenja, nove vrste izracuna ili
-drugaciji nacin vizualizacije, takve promjene je tesko implementirati u ovakvo
-rjesenje. Zbog toga si mozemo pomoci tako da rjesenje implementiramo pomocu
-specijaliziranih komponenti.
+Ovakvo rjesenje pokriva osnovne potrebe zadatka - ocitavamo mjerenja, dajemo im
+semanticko znacenje, racunamo nove vrijednosti i prikazujemo ih korisniku. Ono
+ipak ima i neke nedostatke - sve se nalazi u jednoj velikoj petlji pa nema
+odvojenosti logickih cjelina, nemoguce je ponovno iskoristiti neku komponentu
+koda, tesko bi bilo dodati novi protokol ili mjerenja, ... Zbog toga cemo ovo
+rjesenje ponovno izvesti, ovaj put implementacijom arhitekture kakvu smo
+vidjeli na predavanjima, koja nam omogucuje da izbjegnemo takve nedostatke.
 
 Rjesenje bazirano na predlozenoj arhitekturi
 ''''''''''''''''''''''''''''''''''''''''''''
 
 U predavanju je predstavljena okvirna ideja kako generalno izgledaju
-arhitekture IIoT sustava. Obicno nastanu tri glavne komponente, jedna za
-komunikaciju s fizickim uredajima, druga za obradu podataka koji se prime s
-njih i treca za prezentaciju podataka korisniku. Ovakvu vrstu specijalizacije
-cemo uvesti i u nase rjesenje.
+arhitekture IIoT sustava:
 
-Klase su najjednostavniji nacin kako mozemo definirati odvojene komponente i
-implementirati njihovu specijaliziranu logiku. Prva komponenta koja se namece
-je komponenta za komunikaciju s uredajima. Shodno tome, definiramo klasu
-``Communication`` koja sadrzi logiku za ostvarivanje veze s uredajem, primanje
-podataka s njega i njihovo daljnje slanje u modul za obradu podataka. Zasad
-nemamo komponentu za obradu podataka, tako da cemo cijelu logiku obrade i
-prezentacije podataka kopirati u funkciju koja obavlja primanje podataka. Tako
-dolazimo do sljedece verzije rjesenja:
+.. image:: images/architecture.png
+
+Obicno nastanu tri glavne komponente:
+
+  * Komponenta za komunikaciju s uredajima koja, s jedne strane, koristi
+    industrijske protokole da salje i prima podatke s udaljenih uredaja, a, s
+    druge, prenosi ocitane podatke ostatku sustava.
+  * Komponenta za procesnu logiku - prima podatke ocitane na udaljenim
+    uredajima i daje im semanticko znacenje. Npr. "vrijednost na ASDU adresi 10
+    je 32.1" pretvoriti ce u "Mjerenje I1 je 32.1". Uz to, moze obavljati i
+    svakakve matematicko-logicke operacije, raditi detekciju opasnih
+    vrijednosti, ...
+  * Komponenta za vizualizaciju podataka - prima obradene podatke i
+    specijalizira se za prezentaciju tih podataka korisniku.
+
+Prethodno rjesenje prilagoditi cemo da koristi ovakvu arhitekturu. Komponente
+ce biti predstavljene klasama, a medusobno ce komunicirati tako da ce imati
+reference jedna na drugu i pozivati odgovarajuce metode.
+
+Prva komponenta koju implementiramo je komponenta za komunikaciju s uredajima.
+Definiramo klasu ``Communication`` koja sadrzi logiku za ostvarivanje veze s
+uredajem, primanje podataka s njega i njihovo daljnje slanje u modul za obradu
+podataka. Zasad nemamo komponentu za obradu podataka, tako da cemo cijelu
+logiku obrade i prezentacije podataka kopirati u funkciju koja obavlja primanje
+podataka. Tako dolazimo do sljedece verzije rjesenja:
 
 .. literalinclude:: solutions/4_communication_component.py
    :language: python
 
 Ispis rjesenja izgleda isto kao i kod ranije verzije rjesenja. Razlog tome je
 jednostavan, logika je ostala ista, samo je cijela petlja prebacena u
-``Communication`` klasu. Sad cemo ju dodatno razbiti tako sto cemo dodati novu
-komponentu za obradu podataka, implementiranu u klasi ``Processing``. Ona ima
-glavnu metodu ``process``, koja sadrzi logiku za izracun struje I4 i ispis
-podataka (zasad, dok ne dodamo komponentu za vizualizaciju). Jos jedan dodatak
-je da sad ``Communication`` komponenta treba imati referencu na ``Processing``
-jer je to najjednostavniji nacin da ju "obavijesti" o tome da je primila novo
-ocitanje. Alternativa bi bila da komuniciraju na neki drugi nacin, npr. preko
+``Communication`` klasu. Sad cemo iz nje izdvojiti novu komponentu za obradu
+podataka, implementiranu u klasi ``Processing``. Ona ima glavnu metodu
+``process``, koja sadrzi logiku za izracun struje I4 i ispis podataka (zasad,
+dok ne dodamo komponentu za vizualizaciju). Jos jedan dodatak je da sad
+``Communication`` komponenta treba imati referencu na ``Processing`` jer je to
+najjednostavniji nacin da ju "obavijesti" o tome da je primila novo ocitanje.
+Alternativa bi bila da komuniciraju na neki drugi nacin, npr. preko
 `asyncio.Queue <https://docs.python.org/3/library/asyncio-queue.html>`_, zapisa
 i citanja datoteke, preko socketa, ... Tako dolazimo do nove verzije naseg
 rjesenja:
@@ -184,12 +205,12 @@ rjesenja:
 .. literalinclude:: solutions/5_processing_component.py
    :language: python
 
-Konacno, ako zelimo imati arhitekturu opisanu u predavanju, fali nam jos i
+Konacno, ako zelimo imati arhitekturu opisanu u predavanju, potrebna nam je i
 komponenta za vizualizaciju. Trenutno se cijelo stanje aplikacije ispisuje
 diraktno na konzolu, htjeli bismo tu logiku izdvojiti u zasebnu komponentu i
-mozda izbaciti neki stiliziraniji ispis od Pythonove pretvorbe dictionary-ja u
-string. Stvaramo novu klasu, ``Visual``, koja ima metodu ``render``. Ona prima
-stanje aplikacije u formatu koji propisuje ``Processing`` klasa, i ispisuje
+mozda izbaciti neki stiliziraniji ispis od Pythonove pretvorbe mape u string.
+Stvaramo novu klasu, ``Visual``, koja ima metodu ``render``. Ona prima stanje
+aplikacije u formatu koji propisuje ``Processing`` klasa, i ispisuje
 vrijednosti na konzolu. Zaokruzivanje mozemo takoder prebaciti u ovu klasu,
 posto je ono u ovom slucaju iskljucivo vizualna prilagodba podatka. Slicno kao
 i kod povezivanja klasa za komunikaciju i obradu podataka, komponenta za obradu

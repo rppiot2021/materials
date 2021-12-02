@@ -6,7 +6,7 @@ import sys
 async def async_main():
     master = await modbus.create_tcp_master(
         modbus.ModbusType.TCP,
-        tcp.Address('127.0.0.1', 9999))
+        tcp.Address('161.53.17.239', 8502))
 
 
 def main():
