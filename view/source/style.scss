@@ -1,0 +1,19 @@
+.app {
+
+    display: flex;
+    align-items: center;
+
+    .value {
+        font-size: 30pt;
+        width: 50px;
+    }
+
+    .button {
+        margin-left: 10px;
+        height: fit-content;
+        padding: 5px;
+        border-radius: 5px;
+        background-color: #123456;
+        color: white;
+    }
+}

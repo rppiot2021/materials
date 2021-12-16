@@ -12,3 +12,4 @@ detaljnije objasnjeni, skupa s postupkom rjesavanja.
    02-modbus-console/index
    hat/index
    03-hat-modbus-workshop/index
+   view/index
